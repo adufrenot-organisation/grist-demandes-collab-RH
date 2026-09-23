@@ -22,6 +22,9 @@ schemas={
 "Motifs_RH":[
  {"id":"Code","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},
  {"id":"Actif","fields":{"type":"Bool"}},{"id":"Description","fields":{"type":"Text"}}],
+"ADMIN_PORTAIL":[
+ {"id":"Email","fields":{"type":"Text"}},{"id":"Nom","fields":{"type":"Text"}},
+ {"id":"Role","fields":{"type":"Text"}},{"id":"Actif","fields":{"type":"Bool"}}],
 "Demandes_RH":[
  {"id":"Reference","fields":{"type":"Text"}},{"id":"Demandeur","fields":{"type":"Ref:Ressources"}},
  {"id":"Type","fields":{"type":"Text"}},{"id":"Date_Debut","fields":{"type":"Date"}},
@@ -45,4 +48,16 @@ for name, schema in schemas.items():
         if missing:
             api(f"/docs/{DOC}/tables/{name}/columns","POST",{"columns":missing})
         print("Table vérifiée:",name,"; ajoutées:",", ".join(c["id"] for c in missing) or "aucune")
-print("SETUP V1.3 OK")
+owner=os.environ.get("OWNER_EMAIL","").strip()
+if owner:
+    rows=api(f"/docs/{DOC}/tables/ADMIN_PORTAIL/records").get("records",[])
+    found=next((r for r in rows if str(r.get("fields",{}).get("Email","")).strip().lower()==owner.lower()),None)
+    fields={"Email":owner,"Nom":"Owner","Role":"OWNER","Actif":True}
+    if found:
+        api(f"/docs/{DOC}/tables/ADMIN_PORTAIL/records","PATCH",{"records":[{"id":found["id"],"fields":fields}]})
+    else:
+        api(f"/docs/{DOC}/tables/ADMIN_PORTAIL/records","POST",{"records":[{"fields":fields}]})
+    print("Owner bootstrap configuré:",owner)
+else:
+    print("OWNER_EMAIL non défini : table ADMIN_PORTAIL créée, mais aucun Owner bootstrap ajouté.")
+print("SETUP V1.7 OK")

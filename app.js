@@ -1,5 +1,5 @@
-const VERSION="V1.6";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH"};
+const VERSION="V1.7";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL"};
 const S={user:null,person:null,requests:[],motifs:[],editing:null,isOwner:false,accessLevel:""};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 function syncConfig(){
@@ -67,10 +67,12 @@ const dt=v=>v?new Date(Number(v)*1000).toLocaleDateString("fr-FR"):"—";
 function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(const k of Object.keys(t))if(k!=="id")r[k]=t[k]?.[i];return r})}
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
 async function identify(){
-  // V1.5 : aucune identité saisie dans le widget.
-  // Les Access Rules Grist doivent filtrer Ressources avec user.Email == rec.Email.
-  // Le widget travaille uniquement sur les lignes que Grist autorise déjà à cet utilisateur.
   const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
+  if(S.isOwner && rr.length!==1){
+    S.person=null;
+    S.user={email:S.ownerBootstrap?.email||"",name:S.ownerBootstrap?.name||"Owner"};
+    return;
+  }
   if(rr.length===0)throw new Error("Aucune ressource autorisée pour cet utilisateur. Vérifiez la règle Ressources : user.Email == rec.Email.");
   if(rr.length>1)throw new Error("Plusieurs ressources sont visibles. Les règles d’accès doivent limiter Ressources à la ligne de l’utilisateur connecté.");
   S.person=rr[0];
@@ -80,7 +82,7 @@ async function identify(){
 async function load(){
   const [q,m]=await Promise.all([table(T.requests),table(T.motifs)]);
   S.motifs=m;
-  S.requests=q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id));
+  S.requests=S.person?q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id)):[];
   render();
 }
 function motifName(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Libelle","Nom","Code")||`Motif ${id}`):"—"}
@@ -95,15 +97,26 @@ function showView(name){
   $("pageTitle").textContent=titles[name]||"Demandes RH";
 }
 async function detectOwner(){
-  // Grist fournit le niveau d'accès au widget via onOptions/readiness selon le contexte.
-  // Fallback volontairement restrictif : aucune section Admin si Owner non démontré.
+  // Bootstrap V1.7 : l'espace Admin ne dépend plus des ACL Ressources.
+  // Le setup admin alimente ADMIN_PORTAIL avec les emails autorisés.
   S.isOwner=false;
   try{
+    const admins=await table(T.admins);
+    // Tant que l'identité Grist n'est pas directement exposée par l'API widget,
+    // le bootstrap Owner s'appuie sur une option locale réservée à l'installation
+    // OU sur un ADMIN_PORTAIL unique. Le setup peut créer cette ligne avant les ACL.
     const opt=(await grist.getOptions())||{};
-    const lvl=norm(opt.accessLevel||opt.AccessLevel||"").toLowerCase();
-    S.accessLevel=lvl;
-    S.isOwner=lvl==="owners"||lvl==="owner";
-  }catch{}
+    const ownerEmail=email(opt.Owner_Email||opt.ownerEmail||"");
+    const active=admins.filter(r=>F(r,"Actif")!==false && norm(F(r,"Role")).toUpperCase()==="OWNER");
+    let admin=null;
+    if(ownerEmail) admin=active.find(r=>email(F(r,"Email"))===ownerEmail);
+    else if(active.length===1) admin=active[0];
+    if(admin){
+      S.isOwner=true;
+      S.accessLevel="owner-bootstrap";
+      S.ownerBootstrap={email:norm(F(admin,"Email")),name:norm(F(admin,"Nom"))||norm(F(admin,"Email"))};
+    }
+  }catch(e){console.warn("Bootstrap Owner indisponible:",e)}
   $("adminNav")?.classList.toggle("hidden",!S.isOwner);
 }
 function bindNav(){
@@ -112,7 +125,7 @@ function bindNav(){
 }
 function renderAdmin(){
   if(!S.isOwner)return;
-  $("adminResources").innerHTML=`<strong>${esc(S.person?.Nom||"Administration")}</strong><p>La gestion détaillée des ressources sera alimentée par les données autorisées du document.</p>`;
+  $("adminResources").innerHTML=`<strong>${esc(S.ownerBootstrap?.name||S.person?.Nom||"Administration")}</strong><p>Bootstrap Owner actif. L’administration reste accessible même avant la mise en place des ACL collaborateurs.</p>`;
   $("adminMotifs").innerHTML=`<strong>${S.motifs.length} motif(s) local(aux)</strong><p>Le catalogue reste local à ce document. Le lien Cockpit est réalisé uniquement par Code.</p>`;
   $("syncAdmin").innerHTML=`<strong>Synchronisation navigateur</strong><p>Les échanges cross-document utilisent uniquement les droits disponibles pour l'utilisateur. Aucune clé maître n'est embarquée.</p>`;
 }
@@ -178,6 +191,6 @@ async function boot(){
   $("refresh").onclick=async()=>{try{await syncFromCockpit()}catch(e){console.warn(e)}await load()};
   await detectOwner();
   try{await syncFromCockpit()}catch(e){console.warn("Synchronisation Cockpit indisponible:",e)}
-  await identify();await load();showView("home");
+  await identify();await load();showView(S.isOwner&&!S.person?"acl":"home");
 }
 boot().catch(fatal);
