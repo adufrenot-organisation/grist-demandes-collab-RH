@@ -1,4 +1,4 @@
-# RH Demandes Collaborateurs — V1.3
+# RH Demandes Collaborateurs — V1.4
 
 ## Architecture corrigée
 
@@ -27,3 +27,18 @@ Ne jamais injecter une clé d'administration commune dans `app.js`.
 `Motifs_RH` reste local dans chaque document.
 Aucune synchronisation de catalogue.
 Le rapprochement lors de l'envoi d'une demande se fait par `Motif_Code` -> `Cockpit.Motifs_RH.Code`.
+
+
+## Correctif V1.4 — identité Grist
+
+`grist.getUser()` a été supprimé : cette fonction n'existe pas dans l'API officielle du Custom Widget.
+
+Résolution de l'identité :
+1. option widget `Email_Connexion` si elle est définie ;
+2. sinon, si les Access Rules Grist ne rendent visible qu'une seule ligne active dans `Ressources`, cette ligne est utilisée.
+
+La méthode recommandée est de filtrer `Ressources` par Access Rules avec l'identité Grist
+(`user.Email == rec.Email`). Ainsi le widget ne choisit jamais librement un autre collaborateur.
+
+La documentation officielle expose notamment `grist.getOptions()`, `grist.docApi.fetchTable()`
+et `grist.docApi.getAccessToken()`, mais pas `grist.getUser()`.

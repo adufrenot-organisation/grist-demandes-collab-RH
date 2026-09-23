@@ -1,4 +1,4 @@
-const VERSION="V1.3";
+const VERSION="V1.4";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH"};
 const S={user:null,person:null,requests:[],motifs:[],editing:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -67,12 +67,27 @@ const dt=v=>v?new Date(Number(v)*1000).toLocaleDateString("fr-FR"):"—";
 function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(const k of Object.keys(t))if(k!=="id")r[k]=t[k]?.[i];return r})}
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
 async function identify(){
-  const u=await grist.getUser();
-  if(!u?.email)throw new Error("Impossible d'identifier l'utilisateur Grist connecté.");
-  S.user=u;
-  const rr=await table(T.resources);
-  S.person=rr.find(r=>email(F(r,"Email","email"))===email(u.email));
-  if(!S.person)throw new Error(`Aucune ressource locale ne correspond à ${u.email}. La synchronisation Ressources doit être exécutée.`);
+  // grist.getUser() n'existe pas dans l'API officielle des Custom Widgets.
+  // L'identité est donc résolue sans appel à une API inexistante :
+  // 1) Email_Connexion configuré dans les options du widget, si présent ;
+  // 2) si les ACL Grist ne rendent visible qu'une seule Ressource active, cette ligne est utilisée.
+  // En production, la méthode recommandée est que les Access Rules filtrent Ressources
+  // pour l'utilisateur courant (user.Email == rec.Email).
+  const opts=(await grist.getOptions())||{};
+  const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
+  const configured=email(opts.Email_Connexion||opts.emailConnexion||"");
+  if(configured){
+    S.person=rr.find(r=>email(F(r,"Email","email"))===configured);
+    if(!S.person)throw new Error(`Aucune ressource locale ne correspond à ${configured}.`);
+    S.user={email:configured,name:F(S.person,"Nom")||configured};
+    return;
+  }
+  if(rr.length===1){
+    S.person=rr[0];
+    S.user={email:F(S.person,"Email")||"",name:F(S.person,"Nom")||F(S.person,"Email")||"Collaborateur"};
+    return;
+  }
+  throw new Error("Identité non résolue : configurez les règles d’accès de Ressources pour que l’utilisateur ne voie que sa ligne, ou définissez l’option widget Email_Connexion.");
 }
 async function load(){
   const [q,m]=await Promise.all([table(T.requests),table(T.motifs)]);
