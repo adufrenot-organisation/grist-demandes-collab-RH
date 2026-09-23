@@ -1,6 +1,6 @@
-const VERSION="V1.4";
+const VERSION="V1.6";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH"};
-const S={user:null,person:null,requests:[],motifs:[],editing:null};
+const S={user:null,person:null,requests:[],motifs:[],editing:null,isOwner:false,accessLevel:""};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 function syncConfig(){
   // Configuration utilisateur/session uniquement. Ne jamais embarquer une clé maître dans le code.
@@ -67,27 +67,15 @@ const dt=v=>v?new Date(Number(v)*1000).toLocaleDateString("fr-FR"):"—";
 function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(const k of Object.keys(t))if(k!=="id")r[k]=t[k]?.[i];return r})}
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
 async function identify(){
-  // grist.getUser() n'existe pas dans l'API officielle des Custom Widgets.
-  // L'identité est donc résolue sans appel à une API inexistante :
-  // 1) Email_Connexion configuré dans les options du widget, si présent ;
-  // 2) si les ACL Grist ne rendent visible qu'une seule Ressource active, cette ligne est utilisée.
-  // En production, la méthode recommandée est que les Access Rules filtrent Ressources
-  // pour l'utilisateur courant (user.Email == rec.Email).
-  const opts=(await grist.getOptions())||{};
+  // V1.5 : aucune identité saisie dans le widget.
+  // Les Access Rules Grist doivent filtrer Ressources avec user.Email == rec.Email.
+  // Le widget travaille uniquement sur les lignes que Grist autorise déjà à cet utilisateur.
   const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
-  const configured=email(opts.Email_Connexion||opts.emailConnexion||"");
-  if(configured){
-    S.person=rr.find(r=>email(F(r,"Email","email"))===configured);
-    if(!S.person)throw new Error(`Aucune ressource locale ne correspond à ${configured}.`);
-    S.user={email:configured,name:F(S.person,"Nom")||configured};
-    return;
-  }
-  if(rr.length===1){
-    S.person=rr[0];
-    S.user={email:F(S.person,"Email")||"",name:F(S.person,"Nom")||F(S.person,"Email")||"Collaborateur"};
-    return;
-  }
-  throw new Error("Identité non résolue : configurez les règles d’accès de Ressources pour que l’utilisateur ne voie que sa ligne, ou définissez l’option widget Email_Connexion.");
+  if(rr.length===0)throw new Error("Aucune ressource autorisée pour cet utilisateur. Vérifiez la règle Ressources : user.Email == rec.Email.");
+  if(rr.length>1)throw new Error("Plusieurs ressources sont visibles. Les règles d’accès doivent limiter Ressources à la ligne de l’utilisateur connecté.");
+  S.person=rr[0];
+  const mail=norm(F(S.person,"Email","email"));
+  S.user={email:mail,name:norm(F(S.person,"Nom"))||mail||"Collaborateur"};
 }
 async function load(){
   const [q,m]=await Promise.all([table(T.requests),table(T.motifs)]);
@@ -97,16 +85,63 @@ async function load(){
 }
 function motifName(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Libelle","Nom","Code")||`Motif ${id}`):"—"}
 function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Code")):""}
+function showView(name){
+  if(["resources","motifs","acl","sync"].includes(name)&&!S.isOwner)return;
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
+  document.getElementById(`view-${name}`)?.classList.add("active");
+  document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
+  const titles={home:"Bonjour",new:"Nouvelle demande",mine:"Mes demandes",resources:"Ressources",motifs:"Motifs RH",acl:"ACL & Permissions",sync:"Synchronisation"};
+  $("pageTitle").textContent=titles[name]||"Demandes RH";
+}
+async function detectOwner(){
+  // Grist fournit le niveau d'accès au widget via onOptions/readiness selon le contexte.
+  // Fallback volontairement restrictif : aucune section Admin si Owner non démontré.
+  S.isOwner=false;
+  try{
+    const opt=(await grist.getOptions())||{};
+    const lvl=norm(opt.accessLevel||opt.AccessLevel||"").toLowerCase();
+    S.accessLevel=lvl;
+    S.isOwner=lvl==="owners"||lvl==="owner";
+  }catch{}
+  $("adminNav")?.classList.toggle("hidden",!S.isOwner);
+}
+function bindNav(){
+  document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>showView(b.dataset.view));
+  document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showView(b.dataset.go));
+}
+function renderAdmin(){
+  if(!S.isOwner)return;
+  $("adminResources").innerHTML=`<strong>${esc(S.person?.Nom||"Administration")}</strong><p>La gestion détaillée des ressources sera alimentée par les données autorisées du document.</p>`;
+  $("adminMotifs").innerHTML=`<strong>${S.motifs.length} motif(s) local(aux)</strong><p>Le catalogue reste local à ce document. Le lien Cockpit est réalisé uniquement par Code.</p>`;
+  $("syncAdmin").innerHTML=`<strong>Synchronisation navigateur</strong><p>Les échanges cross-document utilisent uniquement les droits disponibles pour l'utilisateur. Aucune clé maître n'est embarquée.</p>`;
+}
+function auditAcl(){
+  if(!S.isOwner)return;
+  const checks=[
+    ["Ressources","Filtrage collaborateur attendu : user.Email = rec.Email",S.person?"ok":"warn"],
+    ["Demandes_RH","Lecture/édition limitée aux demandes du collaborateur","warn"],
+    ["Champs manager","Statut décisionnel, commentaire et date de décision protégés","warn"]
+  ];
+  const ok=checks.filter(x=>x[2]==="ok").length, score=Math.round(ok/checks.length*100);
+  $("aclScore").textContent=`${score}%`; $("aclState").textContent=score===100?"Conforme":"À vérifier";
+  $("aclResults").innerHTML=checks.map(x=>`<div class="check"><div><strong>${esc(x[0])}</strong><small>${esc(x[1])}</small></div><b class="${x[2]==="ok"?"status-ok":"status-warn"}">${x[2]==="ok"?"Conforme":"À contrôler"}</b></div>`).join("");
+  $("applyAcl").disabled=true; // L'API Custom Widget standard ne permet pas d'écrire les ACL de façon sûre.
+}
+
 function render(){
-  $("identity").textContent=`${S.user.name||S.user.email} · ${S.user.email}`;
+  $("identity").textContent=`${S.user.name||S.user.email}${S.user.email?` · ${S.user.email}`:""}`;
   $("setup").classList.add("hidden");$("app").classList.remove("hidden");$("fatal").classList.add("hidden");
   $("motif").innerHTML='<option value="">— Choisir —</option>'+S.motifs.filter(r=>F(r,"Actif","actif")!==false).map(r=>`<option value="${r.id}">${esc(motifName(r.id))}</option>`).join("");
   $("kw").textContent=S.requests.filter(r=>st(r)==="EN_ATTENTE").length;
   $("kv").textContent=S.requests.filter(r=>st(r)==="VALIDEE").length;
   $("kr").textContent=S.requests.filter(r=>st(r)==="REFUSEE").length;
-  $("rows").innerHTML=S.requests.length?S.requests.slice().reverse().map(r=>{const e=st(r)==="EN_ATTENTE";return `<tr><td>${esc(F(r,"Reference")||"#"+r.id)}</td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td><div class="rowactions">${e?`<button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button>`:""}</div></td></tr>`}).join(""):'<tr><td colspan="6">Aucune demande.</td></tr>';
-  document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>edit(+b.dataset.e));
+  const makeRows=(items,actions=true)=>items.length?items.map(r=>{const e=st(r)==="EN_ATTENTE";return `<tr><td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actions&&e?`<div class="rowactions"><button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button></div>`:""}</td></tr>`}).join(""):'<tr><td colspan="6">Aucune demande.</td></tr>';
+  $("rows").innerHTML=makeRows(S.requests.slice().reverse(),true);
+  $("rowsHome").innerHTML=makeRows(S.requests.slice().reverse().slice(0,5),false);
+  document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{edit(+b.dataset.e);showView("new")});
   document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>cancelReq(+b.dataset.c));
+  renderAdmin();
 }
 function reset(){S.editing=null;$("formTitle").textContent="Nouvelle demande";$("save").textContent="Envoyer";$("type").value="CONGE";$("motif").value="";$("start").value="";$("end").value="";$("comment").value="";$("cancelEdit").classList.add("hidden")}
 function edit(id){const r=S.requests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE")return;S.editing=id;$("formTitle").textContent="Modifier ma demande";$("save").textContent="Enregistrer";$("type").value=F(r,"Type")||"CONGE";$("motif").value=rid(F(r,"Motif"));const iso=v=>new Date(Number(v)*1000).toISOString().slice(0,10);$("start").value=iso(F(r,"Date_Debut"));$("end").value=iso(F(r,"Date_Fin"));$("comment").value=F(r,"Commentaire_Demandeur")||"";$("cancelEdit").classList.remove("hidden")}
@@ -132,5 +167,17 @@ async function save(){
 async function cancelReq(id){const r=S.requests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await load()}
 function msg(t){$("msg").textContent=t;$("msg").classList.remove("hidden")}
 function fatal(e){$("fatal").textContent=e?.message||String(e);$("fatal").classList.remove("hidden");$("app").classList.add("hidden")}
-async function boot(){grist.ready({requiredAccess:"full"});$("save").onclick=()=>save().catch(fatal);$("newBtn").onclick=reset;$("cancelEdit").onclick=reset;$("refresh").onclick=async()=>{try{await syncFromCockpit()}catch(e){console.warn(e)}await load()};try{await syncFromCockpit()}catch(e){console.warn("Synchronisation Cockpit indisponible:",e)}await identify();await load()}
+async function boot(){
+  grist.ready({requiredAccess:"full"});
+  bindNav();
+  $("auditAcl").onclick=auditAcl;
+  $("applyAcl").onclick=()=>{};
+  $("save").onclick=()=>save().catch(fatal);
+  $("newBtn").onclick=()=>{reset();showView("new")};
+  $("cancelEdit").onclick=()=>{reset();showView("mine")};
+  $("refresh").onclick=async()=>{try{await syncFromCockpit()}catch(e){console.warn(e)}await load()};
+  await detectOwner();
+  try{await syncFromCockpit()}catch(e){console.warn("Synchronisation Cockpit indisponible:",e)}
+  await identify();await load();showView("home");
+}
 boot().catch(fatal);

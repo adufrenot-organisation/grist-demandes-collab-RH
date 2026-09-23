@@ -1,7 +1,56 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demandes RH</title><link rel="stylesheet" href="styles.css"><script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head><body>
-<div class="shell"><header><div><small>ESPACE COLLABORATEUR</small><h1>Demandes RH</h1><p id="identity">Connexion…</p></div><b class="version">V1.4</b></header>
-<section id="setup" class="card hidden"><h2>Initialisation</h2><p>Le module utilise ses propres tables locales <b>Ressources</b>, <b>Motifs_RH</b> et <b>Demandes_RH</b>. La synchronisation avec le Cockpit est externe.</p></section>
-<main id="app" class="hidden"><div class="kpis"><div><span>En attente</span><b id="kw">0</b></div><div><span>Validées</span><b id="kv">0</b></div><div><span>Refusées</span><b id="kr">0</b></div></div>
-<section class="card"><div class="head"><div><h2 id="formTitle">Nouvelle demande</h2><p>Création dans la table locale Demandes_RH.</p></div><button id="newBtn" class="secondary">Nouvelle</button></div><div class="grid"><label>Type<select id="type"><option>CONGE</option><option>TELETRAVAIL</option><option>ABSENCE</option><option>AUTRE</option></select></label><label>Motif<select id="motif"></select></label><label>Début<input id="start" type="date"></label><label>Fin<input id="end" type="date"></label><label class="wide">Commentaire<textarea id="comment" rows="3"></textarea></label></div><div class="actions"><button id="save">Envoyer</button><button id="cancelEdit" class="secondary hidden">Annuler la modification</button></div><p id="msg" class="info hidden"></p></section>
-<section class="card"><div class="head"><div><h2>Mes demandes</h2><p>Uniquement les demandes du collaborateur connecté.</p></div><button id="refresh" class="secondary">Actualiser</button></div><div class="table"><table><thead><tr><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></section></main>
-<section id="fatal" class="card error hidden"></section></div><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Demandes RH · V1.6</title><link rel="stylesheet" href="styles.css">
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+  <div class="brand"><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+  <div class="nav-title">MON ESPACE</div>
+  <button class="nav active" data-view="home">⌂ <span>Accueil</span></button>
+  <button class="nav" data-view="new">＋ <span>Nouvelle demande</span></button>
+  <button class="nav" data-view="mine">▤ <span>Mes demandes</span></button>
+  <div id="adminNav" class="hidden">
+    <div class="nav-title admin-title">ADMINISTRATION</div>
+    <button class="nav" data-view="resources">♙ <span>Ressources</span></button>
+    <button class="nav" data-view="motifs">◇ <span>Motifs RH</span></button>
+    <button class="nav" data-view="acl">◈ <span>ACL & Permissions</span></button>
+    <button class="nav" data-view="sync">↻ <span>Synchronisation</span></button>
+  </div>
+  <div class="version">V1.6</div>
+</aside>
+<main class="content">
+<header><div><div class="eyebrow">ESPACE RH</div><h1 id="pageTitle">Bonjour</h1><p id="identity">Identification…</p></div><button id="refresh" class="iconbtn" title="Actualiser">↻</button></header>
+<div id="fatal" class="alert danger hidden"></div>
+<section id="setup" class="card hidden"><h2>Initialisation</h2></section>
+<div id="app" class="hidden">
+<section id="view-home" class="view active">
+ <div class="hero card"><div><span class="pill">Portail collaborateur</span><h2>Gérez vos demandes simplement.</h2><p>Créez une demande, suivez son traitement et consultez les décisions depuis un espace unique.</p><button class="primary" data-go="new">Créer une demande</button></div><div class="hero-art"><span>✓</span></div></div>
+ <div class="kpis"><div class="kpi"><small>EN ATTENTE</small><strong id="kw">0</strong><span>À traiter</span></div><div class="kpi"><small>VALIDÉES</small><strong id="kv">0</strong><span>Acceptées</span></div><div class="kpi"><small>REFUSÉES</small><strong id="kr">0</strong><span>Décisions</span></div></div>
+ <div class="card"><div class="section-head"><div><h3>Dernières demandes</h3><p>Votre activité récente</p></div><button class="ghost" data-go="mine">Tout afficher →</button></div><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody id="rowsHome"></tbody></table></div></div>
+</section>
+<section id="view-new" class="view">
+ <div class="pagehead"><div><span class="pill">DEMANDE</span><h2 id="formTitle">Nouvelle demande</h2><p>Renseignez la période et le motif. Votre manager recevra la demande après synchronisation.</p></div></div>
+ <div class="card formcard"><div class="formgrid">
+  <label>Type<select id="type"><option value="CONGE">Congé</option><option value="TELETRAVAIL">Télétravail</option><option value="ABSENCE">Absence</option></select></label>
+  <label>Motif<select id="motif"></select></label>
+  <label>Date de début<input id="start" type="date"></label><label>Date de fin<input id="end" type="date"></label>
+  <label class="wide">Commentaire<textarea id="comment" rows="4" placeholder="Informations complémentaires…"></textarea></label>
+ </div><div id="msg" class="alert hidden"></div><div class="actions"><button id="cancelEdit" class="secondary hidden">Annuler</button><button id="save" class="primary">Envoyer la demande</button></div></div>
+</section>
+<section id="view-mine" class="view">
+ <div class="pagehead"><div><span class="pill">SUIVI</span><h2>Mes demandes</h2><p>Historique et état de traitement.</p></div><button id="newBtn" class="primary" data-go="new">＋ Nouvelle demande</button></div>
+ <div class="card"><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</section>
+<section id="view-resources" class="view adminview"><div class="pagehead"><div><span class="pill adminpill">ADMIN</span><h2>Ressources</h2><p>Vue d’administration des ressources synchronisées.</p></div></div><div class="card"><div id="adminResources" class="admin-content"></div></div></section>
+<section id="view-motifs" class="view adminview"><div class="pagehead"><div><span class="pill adminpill">ADMIN</span><h2>Motifs RH</h2><p>Catalogue local du portail collaborateur.</p></div></div><div class="card"><div id="adminMotifs" class="admin-content"></div></div></section>
+<section id="view-acl" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">SECURITY CENTER</span><h2>ACL & Permissions</h2><p>Auditez les protections attendues avant toute correction.</p></div></div>
+ <div class="security-grid"><div class="score card"><small>ÉTAT GLOBAL</small><div class="score-ring" id="aclScore">—</div><strong id="aclState">Audit requis</strong><p>Aucune modification automatique.</p></div>
+ <div class="card acl-main"><div class="section-head"><div><h3>Audit des permissions</h3><p>Contrôle des tables sensibles du portail.</p></div><button id="auditAcl" class="primary">Auditer</button></div>
+ <div id="aclResults" class="checks"><div class="empty">Lancez un audit pour afficher le diagnostic.</div></div>
+ <div class="acl-actions"><button id="applyAcl" class="dangerbtn" disabled>Appliquer les corrections</button><span>Confirmation obligatoire avant application.</span></div></div></div>
+</section>
+<section id="view-sync" class="view adminview"><div class="pagehead"><div><span class="pill adminpill">ADMIN</span><h2>Synchronisation</h2><p>État des échanges avec le Cockpit RH.</p></div></div><div class="card"><div id="syncAdmin" class="admin-content"></div></div></section>
+</div></main></div>
+<script src="app.js"></script></body></html>

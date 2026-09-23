@@ -1,4 +1,4 @@
-# RH Demandes Collaborateurs — V1.4
+# RH Demandes Collaborateurs — V1.5
 
 ## Architecture corrigée
 
@@ -29,7 +29,7 @@ Aucune synchronisation de catalogue.
 Le rapprochement lors de l'envoi d'une demande se fait par `Motif_Code` -> `Cockpit.Motifs_RH.Code`.
 
 
-## Correctif V1.4 — identité Grist
+## Correctif V1.5 — identité Grist
 
 `grist.getUser()` a été supprimé : cette fonction n'existe pas dans l'API officielle du Custom Widget.
 
@@ -42,3 +42,17 @@ La méthode recommandée est de filtrer `Ressources` par Access Rules avec l'ide
 
 La documentation officielle expose notamment `grist.getOptions()`, `grist.docApi.fetchTable()`
 et `grist.docApi.getAccessToken()`, mais pas `grist.getUser()`.
+
+
+## V1.5 — identité pilotée par ACL
+
+L'option `Email_Connexion` est supprimée.
+Le widget ne demande et ne choisit aucun email.
+
+`Ressources` doit être filtrée par les Access Rules Grist. Pour un collaborateur connecté,
+le widget exige exactement une Ressource active visible. Cette ligne devient son identité métier.
+
+Voir `REGLES_ACCES_V1_5.md`.
+
+Attention : la synchronisation cross-document depuis le navigateur reste soumise aux droits
+réels accordés par Grist au collaborateur. Aucune clé administrateur n'est intégrée au widget.
