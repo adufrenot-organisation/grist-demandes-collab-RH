@@ -1,6 +1,63 @@
-const VERSION="V1.2";
+const VERSION="V1.3";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH"};
 const S={user:null,person:null,requests:[],motifs:[],editing:null};
+const SYNC={host:"",cockpitDocId:"",apiKey:""};
+function syncConfig(){
+  // Configuration utilisateur/session uniquement. Ne jamais embarquer une clé maître dans le code.
+  // Pour une installation Grist autorisant l'API avec les droits propres de l'utilisateur,
+  // adapter authHeaders() à votre mécanisme SSO/proxy. Une clé saisie ici reste optionnelle
+  // et ne doit être qu'une clé personnelle aux droits minimaux.
+  try{return {...SYNC,...JSON.parse(sessionStorage.getItem("rh_sync_config")||"{}")}}catch{return {...SYNC}}
+}
+function authHeaders(){
+  const c=syncConfig(),h={"Content-Type":"application/json"};
+  if(c.apiKey)h.Authorization=`Bearer ${c.apiKey}`;
+  return h;
+}
+async function remote(path,opt={}){
+  const c=syncConfig(); if(!c.host||!c.cockpitDocId)throw new Error("Synchronisation Cockpit non configurée.");
+  const r=await fetch(`${c.host.replace(/\/$/,"")}/api${path}`,{method:opt.method||"GET",headers:authHeaders(),body:opt.body?JSON.stringify(opt.body):undefined});
+  if(!r.ok)throw new Error(`Sync Cockpit ${r.status}: ${await r.text()}`);
+  return r.status===204?null:r.json();
+}
+async function remoteRecords(tableName){
+  const c=syncConfig();
+  return (await remote(`/docs/${encodeURIComponent(c.cockpitDocId)}/tables/${encodeURIComponent(tableName)}/records`)).records||[];
+}
+async function syncFromCockpit(){
+  const c=syncConfig(); if(!c.host||!c.cockpitDocId)return;
+  // Important: cette lecture ne doit réussir que si les ACL/API du Cockpit l'autorisent pour cet utilisateur.
+  const [team,remoteReq]=await Promise.all([remoteRecords("Team"),remoteRecords("Demandes_RH")]);
+  const localRes=await table(T.resources), localReq=await table(T.requests);
+  const rt=grist.getTable(T.resources), rq=grist.getTable(T.requests);
+  for(const x of team){
+    const f=x.fields||{},mail=email(f.Email); if(!mail)continue;
+    const d=localRes.find(r=>email(F(r,"Email"))===mail);
+    const fields={Email:f.Email,Nom:f.Nom,Profil:f.Profil,Actif:f.Actif,Source_Team_ID:x.id};
+    if(d) await rt.update({id:d.id,fields}); else await rt.create({fields});
+  }
+  for(const x of remoteReq){
+    const f=x.fields||{},uuid=norm(f.UUID_Demande); if(!uuid)continue;
+    const d=localReq.find(r=>norm(F(r,"UUID_Demande"))===uuid); if(!d)continue;
+    await rq.update({id:d.id,fields:{Statut:f.Statut||F(d,"Statut"),Manager_Email:f.Manager_Email||"",Commentaire_Manager:f.Commentaire_Manager||"",Date_Decision:f.Date_Decision||null}});
+  }
+}
+async function syncRequestToCockpit(localId){
+  const c=syncConfig(); if(!c.host||!c.cockpitDocId)return;
+  const localReq=(await table(T.requests)).find(r=>r.id===localId); if(!localReq)return;
+  const localRes=(await table(T.resources)).find(r=>r.id===rid(F(localReq,"Demandeur"))); if(!localRes)return;
+  const [teams,motifs,reqs]=await Promise.all([remoteRecords("Team"),remoteRecords("Motifs_RH"),remoteRecords("Demandes_RH")]);
+  const person=teams.find(x=>email(x.fields?.Email)===email(F(localRes,"Email"))); if(!person)throw new Error("Ressource absente du Cockpit.");
+  const code=norm(F(localReq,"Motif_Code")); const motif=motifs.find(x=>norm(x.fields?.Code)===code);
+  if(!motif)throw new Error(`Motif '${code}' absent du Cockpit.`);
+  const uuid=norm(F(localReq,"UUID_Demande")), found=reqs.find(x=>norm(x.fields?.UUID_Demande)===uuid);
+  const fields={Reference:F(localReq,"Reference"),Demandeur:person.id,Type:F(localReq,"Type"),Date_Debut:F(localReq,"Date_Debut"),Date_Fin:F(localReq,"Date_Fin"),Motif:motif.id,Commentaire_Demandeur:F(localReq,"Commentaire_Demandeur"),Date_Demande:F(localReq,"Date_Demande"),UUID_Demande:uuid};
+  if(!found)fields.Statut=F(localReq,"Statut")||"EN_ATTENTE";
+  const path=`/docs/${encodeURIComponent(c.cockpitDocId)}/tables/Demandes_RH/records`;
+  if(found) await remote(path,{method:"PATCH",body:{records:[{id:found.id,fields}]}});
+  else await remote(path,{method:"POST",body:{records:[{fields}]}});
+}
+
 const $=x=>document.getElementById(x), norm=x=>String(x??"").trim(), email=x=>norm(x).toLowerCase();
 const F=(r,...ks)=>{for(const k of ks)if(r?.[k]!==undefined)return r[k]};
 const rid=v=>Number(Array.isArray(v)?v[1]:(v?.id??v??0))||0;
@@ -47,15 +104,18 @@ async function save(){
   if(S.editing){
     const r=S.requests.find(x=>x.id===S.editing);if(!r||st(r)!=="EN_ATTENTE")throw new Error("Demande non modifiable.");
     await tab.update({id:S.editing,fields});
+    await syncRequestToCockpit(S.editing);
   } else {
     const u=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`;
     Object.assign(fields,{Reference:`DRH-${new Date().getFullYear()}-${u.slice(0,8).toUpperCase()}`,Demandeur:S.person.id,Statut:"EN_ATTENTE",Date_Demande:Math.floor(Date.now()/1000),UUID_Demande:u,Version_Sync:1});
-    await tab.create({fields});
+    const created=await tab.create({fields});
+    const newId=Number(created?.id||created)||0;
+    if(newId)await syncRequestToCockpit(newId);
   }
   reset();await load();
 }
 async function cancelReq(id){const r=S.requests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await load()}
 function msg(t){$("msg").textContent=t;$("msg").classList.remove("hidden")}
 function fatal(e){$("fatal").textContent=e?.message||String(e);$("fatal").classList.remove("hidden");$("app").classList.add("hidden")}
-async function boot(){grist.ready({requiredAccess:"full"});$("save").onclick=()=>save().catch(fatal);$("newBtn").onclick=reset;$("cancelEdit").onclick=reset;$("refresh").onclick=()=>load().catch(fatal);await identify();await load()}
+async function boot(){grist.ready({requiredAccess:"full"});$("save").onclick=()=>save().catch(fatal);$("newBtn").onclick=reset;$("cancelEdit").onclick=reset;$("refresh").onclick=async()=>{try{await syncFromCockpit()}catch(e){console.warn(e)}await load()};try{await syncFromCockpit()}catch(e){console.warn("Synchronisation Cockpit indisponible:",e)}await identify();await load()}
 boot().catch(fatal);

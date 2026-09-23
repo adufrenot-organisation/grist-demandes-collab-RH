@@ -1,34 +1,29 @@
-# RH Demandes Collaborateurs — V1.2
+# RH Demandes Collaborateurs — V1.3
 
-## 1. Tables du document Demandes RH
-Exécuter `setup-demandes-doc.js` une fois avec :
-- `GRIST_HOST`
-- `GRIST_API_KEY`
-- `DEMANDES_DOC_ID`
+## Architecture corrigée
 
-Le script crée/complète :
-- `Ressources`
-- `Motifs_RH`
-- `Demandes_RH`
+### Poste administrateur
+`setup_demandes.py` est le seul script d'installation.
+Il crée/complète les tables locales du document Demandes RH.
+Il utilise une clé API administrateur uniquement au moment du setup.
 
-`Motifs_RH` est **local** et n'est jamais synchronisé. Les deux documents sont reliés par `Motifs_RH.Code`.
+### Poste utilisateur / navigateur
+`app.js` est le widget Grist.
+La synchronisation fonctionnelle est intégrée dans ce JavaScript :
+- rafraîchissement Ressources depuis Cockpit,
+- envoi création/modification d'une demande vers Cockpit,
+- retour Statut / décision Manager vers la demande locale.
 
-## 2. Synchronisation
-`sync.js` utilise :
-- `GRIST_HOST`
-- `GRIST_API_KEY`
-- `COCKPIT_DOC_ID`
-- `DEMANDES_DOC_ID`
+Il n'y a plus de `sync.js` Node à lancer.
 
-Flux :
-1. `Cockpit.Team` -> `Demandes.Ressources` (upsert par Email)
-2. `Demandes.Demandes_RH` -> `Cockpit.Demandes_RH` (upsert par UUID_Demande)
-3. décision manager `Cockpit.Demandes_RH` -> `Demandes.Demandes_RH`
+## Sécurité importante
+Aucune clé API maître n'est embarquée dans le ZIP.
+Le navigateur ne doit disposer que des droits propres/minimaux de l'utilisateur.
+La synchro cross-document nécessite donc que votre hébergement Grist/API/ACL autorise cet accès
+avec l'identité utilisateur, ou qu'un proxy/SSO sécurisé fournisse cet accès.
+Ne jamais injecter une clé d'administration commune dans `app.js`.
 
-Mapping motif :
-`Demandes_RH.Motif` -> motif local -> `Code` stocké dans `Motif_Code` -> recherche du même `Code` dans `Cockpit.Motifs_RH` -> Ref motif local du Cockpit.
-
-Aucune suppression globale. Aucun secret n'est embarqué dans le widget.
-
-## 3. Widget
-Le widget V1.2 travaille exclusivement avec les tables locales du document Demandes RH. Le collaborateur est identifié par l'utilisateur Grist connecté et `Ressources.Email`.
+## Motifs
+`Motifs_RH` reste local dans chaque document.
+Aucune synchronisation de catalogue.
+Le rapprochement lors de l'envoi d'une demande se fait par `Motif_Code` -> `Cockpit.Motifs_RH.Code`.
