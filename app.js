@@ -1,6 +1,6 @@
-const VERSION="V1.7";
+const VERSION="V1.10";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL"};
-const S={user:null,person:null,requests:[],motifs:[],editing:null,isOwner:false,accessLevel:""};
+const S={user:null,person:null,requests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,accessLevel:""};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 function syncConfig(){
   // Configuration utilisateur/session uniquement. Ne jamais embarquer une clé maître dans le code.
@@ -24,6 +24,28 @@ async function remoteRecords(tableName){
   const c=syncConfig();
   return (await remote(`/docs/${encodeURIComponent(c.cockpitDocId)}/tables/${encodeURIComponent(tableName)}/records`)).records||[];
 }
+function setSyncState(state,detail=""){
+  const s=$("syncState"),l=$("syncLast"),d=$("syncDot");
+  if(!s||!l||!d)return;
+  if(state==="busy"){s.textContent="Synchronisation…";d.className="busy";l.textContent=detail||"Échanges en cours";}
+  else if(state==="ok"){s.textContent="Synchronisé";d.className="ok";l.textContent=detail||`Dernière synchro : ${new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}`;}
+  else if(state==="off"){s.textContent="Sync non configurée";d.className="off";l.textContent=detail||"Configurer la connexion Cockpit";}
+  else {s.textContent="Erreur de synchro";d.className="err";l.textContent=detail||"Consulter la configuration";}
+}
+async function syncAll(reason="manual"){
+  const c=syncConfig();
+  if(!c.host||!c.cockpitDocId){setSyncState("off");return false}
+  setSyncState("busy",reason==="startup"?"Mise à jour à l’ouverture":"Mise à jour en cours");
+  try{
+    await syncFromCockpit();
+    setSyncState("ok");
+    return true;
+  }catch(e){
+    console.warn("Synchronisation Cockpit indisponible:",e);
+    setSyncState("err",e?.message||String(e));
+    return false;
+  }
+}
 async function syncFromCockpit(){
   const c=syncConfig(); if(!c.host||!c.cockpitDocId)return;
   // Important: cette lecture ne doit réussir que si les ACL/API du Cockpit l'autorisent pour cet utilisateur.
@@ -33,7 +55,7 @@ async function syncFromCockpit(){
   for(const x of team){
     const f=x.fields||{},mail=email(f.Email); if(!mail)continue;
     const d=localRes.find(r=>email(F(r,"Email"))===mail);
-    const fields={Email:f.Email,Nom:f.Nom,Profil:f.Profil,Actif:f.Actif,Source_Team_ID:x.id};
+    const fields={UUID_Ressource:f.UUID_Ressource||"",Email:f.Email,Nom:f.Nom,Profil:f.Profil,Actif:f.Actif,Source_Team_ID:x.id,Derniere_Sync:Math.floor(Date.now()/1000),Erreur_Sync:""};
     if(d) await rt.update({id:d.id,fields}); else await rt.create({fields});
   }
   for(const x of remoteReq){
@@ -56,6 +78,9 @@ async function syncRequestToCockpit(localId){
   const path=`/docs/${encodeURIComponent(c.cockpitDocId)}/tables/Demandes_RH/records`;
   if(found) await remote(path,{method:"PATCH",body:{records:[{id:found.id,fields}]}});
   else await remote(path,{method:"POST",body:{records:[{fields}]}});
+  const currentVersion=Number(F(localReq,"Version_Sync")||0);
+  await grist.getTable(T.requests).update({id:localId,fields:{Date_Modification:Math.floor(Date.now()/1000),Version_Sync:Math.max(1,currentVersion+1)}});
+  setSyncState("ok","Demande envoyée au Cockpit");
 }
 
 const $=x=>document.getElementById(x), norm=x=>String(x??"").trim(), email=x=>norm(x).toLowerCase();
@@ -80,8 +105,8 @@ async function identify(){
   S.user={email:mail,name:norm(F(S.person,"Nom"))||mail||"Collaborateur"};
 }
 async function load(){
-  const [q,m]=await Promise.all([table(T.requests),table(T.motifs)]);
-  S.motifs=m;
+  const [q,m,res]=await Promise.all([table(T.requests),table(T.motifs),table(T.resources)]);
+  S.motifs=m; S.resources=res;
   S.requests=S.person?q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id)):[];
   render();
 }
@@ -125,9 +150,54 @@ function bindNav(){
 }
 function renderAdmin(){
   if(!S.isOwner)return;
-  $("adminResources").innerHTML=`<strong>${esc(S.ownerBootstrap?.name||S.person?.Nom||"Administration")}</strong><p>Bootstrap Owner actif. L’administration reste accessible même avant la mise en place des ACL collaborateurs.</p>`;
-  $("adminMotifs").innerHTML=`<strong>${S.motifs.length} motif(s) local(aux)</strong><p>Le catalogue reste local à ce document. Le lien Cockpit est réalisé uniquement par Code.</p>`;
-  $("syncAdmin").innerHTML=`<strong>Synchronisation navigateur</strong><p>Les échanges cross-document utilisent uniquement les droits disponibles pour l'utilisateur. Aucune clé maître n'est embarquée.</p>`;
+  const anomalies=S.resources.filter(r=>!norm(F(r,"Nom","nom")));
+  $("resCount").textContent=S.resources.length;
+  $("resActive").textContent=S.resources.filter(r=>F(r,"Actif","actif")!==false).length;
+  $("resErrors").textContent=anomalies.length;
+  $("resourcesRows").innerHTML=S.resources.length?S.resources.map(r=>{
+    const nom=norm(F(r,"Nom","nom")), mail=norm(F(r,"Email","email"));
+    const equipe=norm(F(r,"Equipe_Code","Equipe","equipe")), profil=norm(F(r,"Profil","profil"));
+    const actif=F(r,"Actif","actif")!==false, uuid=norm(F(r,"UUID_Ressource"));
+    const bad=!nom;
+    const state=bad?"Anomalie":!actif?"Inactif":mail?"Synchronisé":"Synchronisé · sans email";
+    return `<tr title="UUID : ${esc(uuid||"—")}"><td><strong>${esc(nom||"—")}</strong></td><td>${esc(mail||"—")}</td><td>${esc(equipe||"—")}</td><td>${esc(profil||"—")}</td><td><span class="state ${bad?"err":!actif?"off":"ok"}">${state}</span></td></tr>`;
+  }).join(""):'<tr><td colspan="5">Aucune ressource synchronisée.</td></tr>';
+  $("motifsRows").innerHTML=S.motifs.length?S.motifs.map(r=>`<tr><td><span class="codechip">${esc(F(r,"Code")||"—")}</span></td><td><strong>${esc(F(r,"Libelle")||"—")}</strong></td><td>${esc(F(r,"Description")||"")}</td><td><span class="state ${F(r,"Actif")===false?"off":"ok"}">${F(r,"Actif")===false?"Inactif":"Actif"}</span></td><td><button class="table-action" data-motif-edit="${r.id}">Modifier</button></td></tr>`).join(""):'<tr><td colspan="5">Aucun motif local.</td></tr>';
+  document.querySelectorAll("[data-motif-edit]").forEach(b=>b.onclick=()=>openMotifEditor(+b.dataset.motifEdit));
+  $("syncAdmin").innerHTML=`<strong>Synchronisation sécurisée RH-SYNC</strong><p>Ressources : Cockpit.Team → Ressources via le compte technique. Motifs : catalogue local, administré ici et rapproché du Cockpit uniquement par Code.</p>`;
+}
+function openMotifEditor(id=null){
+  if(!S.isOwner)return;
+  S.motifEditing=id;
+  const r=id?S.motifs.find(x=>x.id===id):null;
+  $("motifEditorTitle").textContent=r?"Modifier le motif":"Nouveau motif";
+  $("motifCodeAdmin").value=r?norm(F(r,"Code")):"";
+  $("motifLabelAdmin").value=r?norm(F(r,"Libelle")):"";
+  $("motifDescAdmin").value=r?norm(F(r,"Description")):"";
+  $("motifActiveAdmin").checked=r?F(r,"Actif")!==false:true;
+  $("motifAdminMsg").classList.add("hidden");
+  $("motifEditor").classList.remove("hidden");
+}
+function closeMotifEditor(){$("motifEditor").classList.add("hidden");S.motifEditing=null}
+async function saveAdminMotif(){
+  if(!S.isOwner)return;
+  const code=norm($("motifCodeAdmin").value).toUpperCase(),label=norm($("motifLabelAdmin").value);
+  if(!code||!label){$("motifAdminMsg").textContent="Code et libellé sont obligatoires.";$("motifAdminMsg").classList.remove("hidden");return}
+  const dup=S.motifs.find(r=>norm(F(r,"Code")).toUpperCase()===code&&r.id!==S.motifEditing);
+  if(dup){$("motifAdminMsg").textContent=`Le code ${code} existe déjà.`;$("motifAdminMsg").classList.remove("hidden");return}
+  const fields={Code:code,Libelle:label,Description:norm($("motifDescAdmin").value),Actif:$("motifActiveAdmin").checked};
+  const t=grist.getTable(T.motifs);
+  try{
+    if(S.motifEditing)await t.update({id:S.motifEditing,fields});else await t.create({fields});
+    closeMotifEditor();await load();showView("motifs");
+  }catch(e){
+    $("motifAdminMsg").textContent="Impossible d'enregistrer le motif : "+(e?.message||String(e));
+    $("motifAdminMsg").classList.remove("hidden");
+  }
+}
+async function adminSyncResources(){
+  if(!S.isOwner)return;
+  try{await load();showView("resources")}catch(e){fatal(e)}
 }
 function auditAcl(){
   if(!S.isOwner)return;
@@ -177,20 +247,26 @@ async function save(){
   }
   reset();await load();
 }
-async function cancelReq(id){const r=S.requests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await load()}
+async function cancelReq(id){const r=S.requests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await syncRequestToCockpit(id);await load()}
 function msg(t){$("msg").textContent=t;$("msg").classList.remove("hidden")}
 function fatal(e){$("fatal").textContent=e?.message||String(e);$("fatal").classList.remove("hidden");$("app").classList.add("hidden")}
 async function boot(){
   grist.ready({requiredAccess:"full"});
   bindNav();
   $("auditAcl").onclick=auditAcl;
+  $("newMotifBtn").onclick=()=>openMotifEditor();
+  $("closeMotif").onclick=closeMotifEditor;
+  $("cancelMotif").onclick=closeMotifEditor;
+  $("saveMotif").onclick=()=>saveAdminMotif().catch(fatal);
+  $("syncResourcesBtn").onclick=adminSyncResources;
   $("applyAcl").onclick=()=>{};
   $("save").onclick=()=>save().catch(fatal);
   $("newBtn").onclick=()=>{reset();showView("new")};
   $("cancelEdit").onclick=()=>{reset();showView("mine")};
-  $("refresh").onclick=async()=>{try{await syncFromCockpit()}catch(e){console.warn(e)}await load()};
+  $("refresh").onclick=async()=>{await syncAll("manual");await load()};
+  $("syncNow").onclick=async()=>{await syncAll("manual");await load()};
   await detectOwner();
-  try{await syncFromCockpit()}catch(e){console.warn("Synchronisation Cockpit indisponible:",e)}
+  await syncAll("startup")
   await identify();await load();showView(S.isOwner&&!S.person?"acl":"home");
 }
 boot().catch(fatal);

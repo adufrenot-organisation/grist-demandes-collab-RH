@@ -16,9 +16,10 @@ def api(path, method="GET", body=None):
 
 schemas={
 "Ressources":[
- {"id":"Email","fields":{"type":"Text"}},{"id":"Nom","fields":{"type":"Text"}},
+ {"id":"UUID_Ressource","fields":{"type":"Text"}},{"id":"Email","fields":{"type":"Text"}},{"id":"Nom","fields":{"type":"Text"}},
  {"id":"Profil","fields":{"type":"Text"}},{"id":"Equipe_Code","fields":{"type":"Text"}},
- {"id":"Actif","fields":{"type":"Bool"}},{"id":"Source_Team_ID","fields":{"type":"Int"}}],
+ {"id":"Actif","fields":{"type":"Bool"}},{"id":"Source_Team_ID","fields":{"type":"Int"}},
+ {"id":"Derniere_Sync","fields":{"type":"DateTime"}},{"id":"Erreur_Sync","fields":{"type":"Text"}}],
 "Motifs_RH":[
  {"id":"Code","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},
  {"id":"Actif","fields":{"type":"Bool"}},{"id":"Description","fields":{"type":"Text"}}],
@@ -60,4 +61,4 @@ if owner:
     print("Owner bootstrap configuré:",owner)
 else:
     print("OWNER_EMAIL non défini : table ADMIN_PORTAIL créée, mais aucun Owner bootstrap ajouté.")
-print("SETUP V1.7 OK")
+print("SETUP V1.9 OK")

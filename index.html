@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.7</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.9</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
@@ -17,7 +17,11 @@
     <button class="nav" data-view="acl">◈ <span>ACL & Permissions</span></button>
     <button class="nav" data-view="sync">↻ <span>Synchronisation</span></button>
   </div>
-  <div class="version">V1.7</div>
+  <div class="syncmini" id="syncMini">
+  <span id="syncDot">●</span><div><strong id="syncState">Synchronisation</strong><small id="syncLast">Pas encore exécutée</small></div>
+  <button id="syncNow" title="Synchroniser maintenant">↻</button>
+</div>
+<div class="version">V1.10</div>
 </aside>
 <main class="content">
 <header><div><div class="eyebrow">ESPACE RH</div><h1 id="pageTitle">Bonjour</h1><p id="identity">Identification…</p></div><button id="refresh" class="iconbtn" title="Actualiser">↻</button></header>
@@ -42,8 +46,18 @@
  <div class="pagehead"><div><span class="pill">SUIVI</span><h2>Mes demandes</h2><p>Historique et état de traitement.</p></div><button id="newBtn" class="primary" data-go="new">＋ Nouvelle demande</button></div>
  <div class="card"><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 </section>
-<section id="view-resources" class="view adminview"><div class="pagehead"><div><span class="pill adminpill">ADMIN</span><h2>Ressources</h2><p>Vue d’administration des ressources synchronisées.</p></div></div><div class="card"><div id="adminResources" class="admin-content"></div></div></section>
-<section id="view-motifs" class="view adminview"><div class="pagehead"><div><span class="pill adminpill">ADMIN</span><h2>Motifs RH</h2><p>Catalogue local du portail collaborateur.</p></div></div><div class="card"><div id="adminMotifs" class="admin-content"></div></div></section>
+<section id="view-resources" class="view adminview">
+<div class="pagehead"><div><span class="pill adminpill">MASTER / SLAVE</span><h2>Ressources</h2><p>Référentiel en lecture seule, alimenté depuis Cockpit.Team.</p></div><button id="syncResourcesBtn" class="primary">↻ Rafraîchir</button></div>
+<div class="kpis admin-kpis"><div class="kpi"><small>RESSOURCES</small><strong id="resCount">0</strong><span>reçues</span></div><div class="kpi"><small>ACTIVES</small><strong id="resActive">0</strong><span>utilisables</span></div><div class="kpi"><small>ANOMALIES</small><strong id="resErrors">0</strong><span>à contrôler</span></div></div>
+<div class="card"><div class="section-head"><div><h3>Référentiel synchronisé</h3><p>Aucune création locale : Cockpit.Team reste maître.</p></div></div><div class="tablewrap"><table><thead><tr><th>Nom</th><th>Email</th><th>Équipe</th><th>Profil</th><th>État</th></tr></thead><tbody id="resourcesRows"></tbody></table></div></div>
+</section>
+<section id="view-motifs" class="view adminview">
+<div class="pagehead"><div><span class="pill adminpill">RÉFÉRENTIEL LOCAL</span><h2>Motifs RH</h2><p>Catalogue propre au portail. Le Code assure la correspondance avec le Cockpit.</p></div><button id="newMotifBtn" class="primary">＋ Nouveau motif</button></div>
+<div class="card"><div class="tablewrap"><table><thead><tr><th>Code</th><th>Libellé</th><th>Description</th><th>État</th><th></th></tr></thead><tbody id="motifsRows"></tbody></table></div></div>
+<div id="motifEditor" class="modal hidden"><div class="modalbox"><div class="modalhead"><div><span class="pill adminpill">MOTIF RH</span><h3 id="motifEditorTitle">Nouveau motif</h3></div><button id="closeMotif" class="iconbtn">×</button></div>
+<div class="formgrid"><label>Code<input id="motifCodeAdmin" maxlength="40" placeholder="Ex. CP"></label><label>Libellé<input id="motifLabelAdmin" maxlength="120" placeholder="Ex. Congés payés"></label><label class="wide">Description<textarea id="motifDescAdmin" rows="4"></textarea></label><label class="toggleline wide"><input id="motifActiveAdmin" type="checkbox" checked> Motif actif</label></div>
+<div id="motifAdminMsg" class="alert hidden"></div><div class="actions"><button id="cancelMotif" class="secondary">Annuler</button><button id="saveMotif" class="primary">Enregistrer</button></div></div></div>
+</section>
 <section id="view-acl" class="view adminview">
  <div class="pagehead"><div><span class="pill adminpill">SECURITY CENTER</span><h2>ACL & Permissions</h2><p>Auditez les protections attendues avant toute correction.</p></div></div>
  <div class="security-grid"><div class="score card"><small>ÉTAT GLOBAL</small><div class="score-ring" id="aclScore">—</div><strong id="aclState">Audit requis</strong><p>Aucune modification automatique.</p></div>
