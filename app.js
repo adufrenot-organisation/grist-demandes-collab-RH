@@ -1,4 +1,4 @@
-const VERSION="V1.1";
+const VERSION="V1.2";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH"};
 const S={user:null,person:null,requests:[],motifs:[],editing:null};
 const $=x=>document.getElementById(x), norm=x=>String(x??"").trim(), email=x=>norm(x).toLowerCase();
