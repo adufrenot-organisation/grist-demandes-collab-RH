@@ -1,4 +1,4 @@
-const VERSION="V1.26";
+const VERSION="V1.27";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:""};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -302,4 +302,52 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
   setOpen("space");
+});
+
+
+// V1.27 — regroupement accordéon robuste par data-view
+document.addEventListener("DOMContentLoaded", () => {
+  const sidebar = document.querySelector(".sidebar");
+  if (!sidebar) return;
+
+  const groups = {
+    space: ["home","new","mine","others"],
+    admin: ["resources","motifs","acl","sync"]
+  };
+
+  const applyAccordion = (open) => {
+    sidebar.dataset.openSection = open;
+    Object.entries(groups).forEach(([group, views]) => {
+      const visible = group === open;
+      views.forEach(view => {
+        sidebar.querySelectorAll(`[data-view="${view}"]`).forEach(el => {
+          el.style.setProperty("display", visible ? "flex" : "none", "important");
+        });
+      });
+    });
+
+    // Le bloc d'état de synchronisation appartient à ADMINISTRATION.
+    sidebar.querySelectorAll(".syncbox").forEach(el => {
+      el.style.setProperty("display", open === "admin" ? "flex" : "none", "important");
+    });
+
+    sidebar.querySelectorAll(".nav-title[data-accordion]").forEach(h => {
+      const active = h.dataset.accordion === open;
+      h.classList.toggle("open", active);
+      h.setAttribute("aria-expanded", active ? "true" : "false");
+    });
+  };
+
+  sidebar.querySelectorAll(".nav-title[data-accordion]").forEach(h => {
+    const activate = () => applyAccordion(h.dataset.accordion);
+    h.onclick = activate;
+    h.onkeydown = e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activate();
+      }
+    };
+  });
+
+  applyAccordion("space");
 });
