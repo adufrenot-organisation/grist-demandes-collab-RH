@@ -88,3 +88,59 @@
   .sidebar .nav{margin-top:1px!important;margin-bottom:1px!important}
   .sidebar .syncbox{margin-top:11px!important}
 }
+
+/* V1.25 — accordéon exclusif, retour à une police plus confortable */
+.sidebar .nav-title[data-accordion]{
+  cursor:pointer!important;
+  user-select:none!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  padding:7px 10px!important;
+  margin:12px 2px 5px!important;
+  border-radius:9px!important;
+}
+.sidebar .nav-title[data-accordion]:hover{
+  background:rgba(255,255,255,.05)!important;
+}
+.sidebar .acc-chevron{
+  font-size:14px!important;
+  transition:transform .18s ease!important;
+  opacity:.75!important;
+}
+.sidebar .nav-title[data-accordion].open .acc-chevron{
+  transform:rotate(180deg)!important;
+}
+.sidebar .accordion-item{display:none!important}
+.sidebar[data-open-section="space"] .accordion-space{display:flex!important}
+.sidebar[data-open-section="admin"] .accordion-admin{display:flex!important}
+
+/* Retour à la taille de police confortable d'avant les compactages */
+.sidebar .nav{
+  font-size:16px!important;
+  min-height:44px!important;
+  padding:9px 12px!important;
+  margin:2px 0!important;
+  line-height:1.2!important;
+}
+.sidebar .nav-title{
+  font-size:11px!important;
+  line-height:1.15!important;
+}
+.sidebar .admin-title{margin-top:12px!important}
+.sidebar .syncbox.accordion-admin{
+  margin-top:10px!important;
+}
+@media(max-height:760px){
+  .sidebar .nav{
+    font-size:15px!important;
+    min-height:40px!important;
+    padding:7px 11px!important;
+  }
+  .sidebar .nav-title[data-accordion]{
+    margin-top:8px!important;
+    margin-bottom:3px!important;
+    padding-top:5px!important;
+    padding-bottom:5px!important;
+  }
+}

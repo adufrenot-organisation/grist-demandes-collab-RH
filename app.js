@@ -1,4 +1,4 @@
-const VERSION="V1.24";
+const VERSION="V1.25";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:""};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -278,3 +278,28 @@ async function boot(){
   await identify();await load();showView(S.isOwner&&!S.person?"acl":"home");
 }
 boot().catch(fatal);
+
+// V1.25 — rubriques exclusives de la sidebar
+document.addEventListener("DOMContentLoaded", () => {
+  const sidebar = document.querySelector(".sidebar");
+  if (!sidebar) return;
+  const heads = [...sidebar.querySelectorAll(".nav-title[data-accordion]")];
+  const setOpen = (name) => {
+    sidebar.dataset.openSection = name;
+    heads.forEach(h => {
+      const open = h.dataset.accordion === name;
+      h.classList.toggle("open", open);
+      h.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  };
+  heads.forEach(h => {
+    h.setAttribute("role","button");
+    h.setAttribute("tabindex","0");
+    const activate = () => setOpen(h.dataset.accordion);
+    h.addEventListener("click", activate);
+    h.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+    });
+  });
+  setOpen("space");
+});
