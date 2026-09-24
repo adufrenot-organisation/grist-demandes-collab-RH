@@ -1,6 +1,6 @@
-const VERSION="V1.10";
+const VERSION="V1.11";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL"};
-const S={user:null,person:null,requests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,accessLevel:""};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:""};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 function syncConfig(){
   // Configuration utilisateur/session uniquement. Ne jamais embarquer une clé maître dans le code.
@@ -107,18 +107,25 @@ async function identify(){
 async function load(){
   const [q,m,res]=await Promise.all([table(T.requests),table(T.motifs),table(T.resources)]);
   S.motifs=m; S.resources=res;
-  S.requests=S.person?q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id)):[];
+  S.isAdmin=norm(F(S.person,"Profil","profil")).toUpperCase()==="ADMIN";
+  S.allRequests=q;
+  S.myRequests=S.person?q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id)):[];
+  // Sécurité : q ne contient que ce que les ACL Grist autorisent réellement.
+  // ADMIN voit tout q ; tous les autres profils restent limités à leurs propres demandes.
+  S.requests=S.isAdmin?q:S.myRequests;
+  $("allRequestsNav")?.classList.toggle("hidden",!S.isAdmin);
   render();
 }
 function motifName(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Libelle","Nom","Code")||`Motif ${id}`):"—"}
 function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Code")):""}
 function showView(name){
   if(["resources","motifs","acl","sync"].includes(name)&&!S.isOwner)return;
+  if(name==="all"&&!S.isAdmin)return;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:"Bonjour",new:"Nouvelle demande",mine:"Mes demandes",resources:"Ressources",motifs:"Motifs RH",acl:"ACL & Permissions",sync:"Synchronisation"};
+  const titles={home:"Bonjour",new:"Nouvelle demande",mine:"Mes demandes",all:"Toutes les demandes",resources:"Ressources",motifs:"Motifs RH",acl:"ACL & Permissions",sync:"Synchronisation"};
   $("pageTitle").textContent=titles[name]||"Demandes RH";
 }
 async function detectOwner(){
@@ -216,18 +223,19 @@ function render(){
   $("identity").textContent=`${S.user.name||S.user.email}${S.user.email?` · ${S.user.email}`:""}`;
   $("setup").classList.add("hidden");$("app").classList.remove("hidden");$("fatal").classList.add("hidden");
   $("motif").innerHTML='<option value="">— Choisir —</option>'+S.motifs.filter(r=>F(r,"Actif","actif")!==false).map(r=>`<option value="${r.id}">${esc(motifName(r.id))}</option>`).join("");
-  $("kw").textContent=S.requests.filter(r=>st(r)==="EN_ATTENTE").length;
-  $("kv").textContent=S.requests.filter(r=>st(r)==="VALIDEE").length;
-  $("kr").textContent=S.requests.filter(r=>st(r)==="REFUSEE").length;
+  $("kw").textContent=S.myRequests.filter(r=>st(r)==="EN_ATTENTE").length;
+  $("kv").textContent=S.myRequests.filter(r=>st(r)==="VALIDEE").length;
+  $("kr").textContent=S.myRequests.filter(r=>st(r)==="REFUSEE").length;
   const makeRows=(items,actions=true)=>items.length?items.map(r=>{const e=st(r)==="EN_ATTENTE";return `<tr><td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actions&&e?`<div class="rowactions"><button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button></div>`:""}</td></tr>`}).join(""):'<tr><td colspan="6">Aucune demande.</td></tr>';
-  $("rows").innerHTML=makeRows(S.requests.slice().reverse(),true);
-  $("rowsHome").innerHTML=makeRows(S.requests.slice().reverse().slice(0,5),false);
+  $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),true);
+  $("rowsHome").innerHTML=makeRows(S.myRequests.slice().reverse().slice(0,5),false);
+  if($("rowsAll")) $("rowsAll").innerHTML=makeRows(S.isAdmin?S.allRequests.slice().reverse():[],false);
   document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{edit(+b.dataset.e);showView("new")});
   document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>cancelReq(+b.dataset.c));
   renderAdmin();
 }
 function reset(){S.editing=null;$("formTitle").textContent="Nouvelle demande";$("save").textContent="Envoyer";$("type").value="CONGE";$("motif").value="";$("start").value="";$("end").value="";$("comment").value="";$("cancelEdit").classList.add("hidden")}
-function edit(id){const r=S.requests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE")return;S.editing=id;$("formTitle").textContent="Modifier ma demande";$("save").textContent="Enregistrer";$("type").value=F(r,"Type")||"CONGE";$("motif").value=rid(F(r,"Motif"));const iso=v=>new Date(Number(v)*1000).toISOString().slice(0,10);$("start").value=iso(F(r,"Date_Debut"));$("end").value=iso(F(r,"Date_Fin"));$("comment").value=F(r,"Commentaire_Demandeur")||"";$("cancelEdit").classList.remove("hidden")}
+function edit(id){const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE")return;S.editing=id;$("formTitle").textContent="Modifier ma demande";$("save").textContent="Enregistrer";$("type").value=F(r,"Type")||"CONGE";$("motif").value=rid(F(r,"Motif"));const iso=v=>new Date(Number(v)*1000).toISOString().slice(0,10);$("start").value=iso(F(r,"Date_Debut"));$("end").value=iso(F(r,"Date_Fin"));$("comment").value=F(r,"Commentaire_Demandeur")||"";$("cancelEdit").classList.remove("hidden")}
 async function save(){
   const a=$("start").value,b=$("end").value,m=+$("motif").value;
   if(!a||!b||!m)return msg("Motif et période obligatoires.");
@@ -235,7 +243,7 @@ async function save(){
   const fields={Type:$("type").value,Date_Debut:ep(a),Date_Fin:ep(b),Motif:m,Motif_Code:motifCode(m),Commentaire_Demandeur:$("comment").value.trim(),Date_Modification:Math.floor(Date.now()/1000)};
   const tab=grist.getTable(T.requests);
   if(S.editing){
-    const r=S.requests.find(x=>x.id===S.editing);if(!r||st(r)!=="EN_ATTENTE")throw new Error("Demande non modifiable.");
+    const r=S.myRequests.find(x=>x.id===S.editing);if(!r||st(r)!=="EN_ATTENTE")throw new Error("Demande non modifiable.");
     await tab.update({id:S.editing,fields});
     await syncRequestToCockpit(S.editing);
   } else {
@@ -247,7 +255,7 @@ async function save(){
   }
   reset();await load();
 }
-async function cancelReq(id){const r=S.requests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await syncRequestToCockpit(id);await load()}
+async function cancelReq(id){const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await syncRequestToCockpit(id);await load()}
 function msg(t){$("msg").textContent=t;$("msg").classList.remove("hidden")}
 function fatal(e){$("fatal").textContent=e?.message||String(e);$("fatal").classList.remove("hidden");$("app").classList.add("hidden")}
 async function boot(){
