@@ -185,3 +185,11 @@
     margin:2px 0!important;
   }
 }
+
+/* V1.28 — correctif réel : Autres demandes = data-view="all" */
+.sidebar[data-open-section="admin"] #allRequestsNav{
+  display:none!important;
+}
+.sidebar[data-open-section="space"] #allRequestsNav:not(.hidden){
+  display:flex!important;
+}

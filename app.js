@@ -1,4 +1,4 @@
-const VERSION="V1.27";
+const VERSION="V1.28";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:""};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -311,7 +311,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!sidebar) return;
 
   const groups = {
-    space: ["home","new","mine","others"],
+    space: ["home","new","mine","all"],
     admin: ["resources","motifs","acl","sync"]
   };
 
