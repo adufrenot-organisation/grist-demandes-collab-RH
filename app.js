@@ -1,4 +1,4 @@
-const VERSION="V1.11";
+const VERSION="V1.13";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:""};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -125,7 +125,7 @@ function showView(name){
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:"Bonjour",new:"Nouvelle demande",mine:"Mes demandes",all:"Toutes les demandes",resources:"Ressources",motifs:"Motifs RH",acl:"ACL & Permissions",sync:"Synchronisation"};
+  const titles={home:"Bonjour",new:"Nouvelle demande",mine:"Mes demandes",all:"Autres demandes",resources:"Ressources",motifs:"Motifs RH",acl:"ACL & Permissions",sync:"Synchronisation"};
   $("pageTitle").textContent=titles[name]||"Demandes RH";
 }
 async function detectOwner(){
@@ -229,7 +229,7 @@ function render(){
   const makeRows=(items,actions=true)=>items.length?items.map(r=>{const e=st(r)==="EN_ATTENTE";return `<tr><td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actions&&e?`<div class="rowactions"><button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button></div>`:""}</td></tr>`}).join(""):'<tr><td colspan="6">Aucune demande.</td></tr>';
   $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),true);
   $("rowsHome").innerHTML=makeRows(S.myRequests.slice().reverse().slice(0,5),false);
-  if($("rowsAll")) $("rowsAll").innerHTML=makeRows(S.isAdmin?S.allRequests.slice().reverse():[],false);
+  if($("rowsAll")) $("rowsAll").innerHTML=makeRows(S.isAdmin?S.allRequests.filter(r=>!S.person||rid(F(r,"Demandeur"))!==Number(S.person.id)).slice().reverse():[],false);
   document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{edit(+b.dataset.e);showView("new")});
   document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>cancelReq(+b.dataset.c));
   renderAdmin();

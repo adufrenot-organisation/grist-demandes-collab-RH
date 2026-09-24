@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.11</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.13</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
@@ -9,7 +9,8 @@
   <div class="nav-title">MON ESPACE</div>
   <button class="nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="nav" data-view="new">＋ <span>Nouvelle demande</span></button>
-  <button class="nav" data-view="mine">▤ <span>Mes demandes</span></button>\n  <button id="allRequestsNav" class="nav hidden" data-view="all">▦ <span>Toutes les demandes</span></button>
+  <button class="nav" data-view="mine">▤ <span>Mes demandes</span></button>
+  <button id="allRequestsNav" class="nav hidden" data-view="all">▦ <span>Autres demandes</span></button>
   <div id="adminNav" class="hidden">
     <div class="nav-title admin-title">ADMINISTRATION</div>
     <button class="nav" data-view="resources">♙ <span>Ressources</span></button>
@@ -21,7 +22,7 @@
   <span id="syncDot">●</span><div><strong id="syncState">Synchronisation</strong><small id="syncLast">Pas encore exécutée</small></div>
   <button id="syncNow" title="Synchroniser maintenant">↻</button>
 </div>
-<div class="version">V1.11</div>
+<div class="version">V1.13</div>
 </aside>
 <main class="content">
 <header><div><div class="eyebrow">ESPACE RH</div><h1 id="pageTitle">Bonjour</h1><p id="identity">Identification…</p></div><button id="refresh" class="iconbtn" title="Actualiser">↻</button></header>
@@ -47,7 +48,7 @@
  <div class="card"><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 </section>
 <section id="view-all" class="view">
- <div class="pagehead"><div><span class="pill adminpill">ADMIN</span><h2>Toutes les demandes</h2><p>Vue globale réservée au profil ADMIN. Les actions personnelles restent dans « Mes demandes ».</p></div></div>
+ <div class="pagehead"><div><span class="pill adminpill">ADMIN</span><h2>Autres demandes</h2><p>Demandes des autres utilisateurs, réservées au profil ADMIN. Les demandes personnelles restent dans « Mes demandes ».</p></div></div>
  <div class="card"><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody id="rowsAll"></tbody></table></div></div>
 </section>
 <section id="view-resources" class="view adminview">
