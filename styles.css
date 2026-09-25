@@ -341,3 +341,83 @@ main > header{
     display:none;
   }
 }
+
+
+/* V1.41 — Managers & Ressources plus compact et équilibré */
+#view-managers{
+  max-width:1080px;
+}
+#view-managers .hero{
+  margin-bottom:22px;
+}
+#view-managers .hero h2{
+  margin-bottom:6px;
+}
+#view-managers .card{
+  border-radius:20px;
+}
+#view-managers .section-head{
+  padding:24px 28px 18px;
+  align-items:flex-start;
+}
+#view-managers .section-head h3{
+  margin-bottom:7px;
+}
+#view-managers .section-head p{
+  margin-bottom:4px;
+}
+#view-managers .section-head .secondary{
+  min-height:42px;
+  padding:9px 16px;
+}
+#managerForm{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+  gap:16px;
+  align-items:end;
+  padding:18px 28px 22px;
+}
+#managerForm label{
+  margin:0;
+  min-width:0;
+}
+#managerForm select{
+  width:100%;
+  min-width:0;
+  height:46px;
+}
+#managerForm button{
+  height:46px;
+  padding:0 20px;
+  white-space:nowrap;
+}
+#managerRows th,
+#managerRows td{
+  padding-top:14px;
+  padding-bottom:14px;
+}
+@media(max-width:980px){
+  #view-managers{
+    max-width:none;
+  }
+  #managerForm{
+    grid-template-columns:1fr 1fr;
+  }
+  #managerForm button{
+    grid-column:1/-1;
+    justify-self:start;
+  }
+}
+@media(max-width:680px){
+  #view-managers .section-head{
+    padding:20px;
+  }
+  #managerForm{
+    grid-template-columns:1fr;
+    padding:16px 20px 20px;
+  }
+  #managerForm button{
+    grid-column:auto;
+    width:100%;
+  }
+}
