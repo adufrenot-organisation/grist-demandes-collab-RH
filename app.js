@@ -1,4 +1,4 @@
-const VERSION="V1.34";
+const VERSION="V1.35";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],viewAs:null,realPerson:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -119,7 +119,6 @@ async function load(){
   $("allRequestsNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
   render();
   applyLabels();
-  try{await loadManagerLinks();renderViewAs()}catch(e){console.warn("Managers_Ressources indisponible:",e)}
 }
 function motifName(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Libelle","Nom","Code")||`Motif ${id}`):"—"}
 function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Code")):""}
@@ -310,7 +309,7 @@ function managedResourcesFor(person=S.realPerson||S.person){
   return S.resources.filter(r=>ids.has(Number(r.id))&&F(r,"Actif","actif")!==false);
 }
 function renderViewAs(){
-  const bar=$("viewAsBar"),sel=$("viewAsSelect"); if(!bar||!sel)return;
+  const bar=$("viewAsBar"),sel=$("viewAsSelect"); if(!bar||!sel||!S.user||!Array.isArray(S.resources))return;
   const managed=managedResourcesFor();
   bar.classList.toggle("hidden",managed.length===0&&!S.viewAs);
   sel.innerHTML=`<option value="">${esc(L("viewas.self","Moi-même"))}</option>`+managed.map(r=>`<option value="${r.id}">${esc(resourceLabel(r))}</option>`).join("");
@@ -349,7 +348,7 @@ function applyReadOnlyViewAs(){
 async function renderManagerAdmin(){
   if(!S.isOwner)return;
   let exists=false;
-  try{exists=await managerTableExists()}catch(e){console.warn(e)}
+  try{exists=await managerTableExists()}catch(e){console.warn("Managers_Ressources:",e);return}
   $("managerManager")?.classList.toggle("hidden",!exists);
   if($("managerSetupText"))$("managerSetupText").innerHTML=exists?`<strong>Managers_Ressources</strong> est disponible.`:`<strong>Managers_Ressources</strong> n’existe pas encore.`;
   if(!exists)return;
@@ -554,6 +553,14 @@ async function boot(){
   await load();
   try{await loadLabels()}catch(e){console.warn("Libellés optionnels indisponibles:",e)}
   showView(S.isOwner&&!S.person?"acl":"home");
+  // Fonction optionnelle : seulement après démarrage complet du portail.
+  setTimeout(async()=>{
+    try{
+      await loadManagerLinks();
+      renderViewAs();
+      if(S.isOwner)await renderManagerAdmin();
+    }catch(e){console.warn("Module manager optionnel indisponible:",e)}
+  },0);
 }
 boot().catch(fatal);
 
