@@ -559,3 +559,20 @@ main > header{
     padding-right:20px;
   }
 }
+
+/* V1.44 — action Retirer explicite */
+.manager-remove{
+  color:#b42336!important;
+  border-color:#f2c7ce!important;
+  background:#fff!important;
+  opacity:1!important;
+  cursor:pointer!important;
+}
+.manager-remove:hover{
+  background:#fff3f5!important;
+  border-color:#e9aab4!important;
+}
+.manager-remove:disabled{
+  opacity:.45!important;
+  cursor:not-allowed!important;
+}

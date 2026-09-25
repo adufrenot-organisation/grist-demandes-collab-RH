@@ -1,4 +1,4 @@
-const VERSION="V1.43";
+const VERSION="V1.44";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -143,6 +143,7 @@ async function load(){
   S.isAdmin=norm(F(S.person,"Profil","profil")).toUpperCase()==="ADMIN";
   $("adminNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
   document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!S.isOwner));
+  document.querySelectorAll(".manager-admin-only").forEach(el=>el.classList.toggle("hidden",!(S.isAdmin||S.isOwner)));
   S.allRequests=q;
   S.myRequests=S.person?q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id)):[];
   // Sécurité : q ne contient que ce que les ACL Grist autorisent réellement.
@@ -315,7 +316,7 @@ function rowsFromFetch(raw){
   return ids.map((id,i)=>{const r={id};Object.keys(raw||{}).forEach(k=>{if(k!=="id"&&Array.isArray(raw[k]))r[k]=raw[k][i]});return r});
 }
 async function refreshManagersAdmin(){
-  if(!S.isOwner)return;
+  if(!(S.isAdmin||S.isOwner))return;
   try{await renderManagersAdmin()}catch(e){managerAdminError(e)}
 }
 function managerAdminError(e){
@@ -324,7 +325,7 @@ function managerAdminError(e){
 }
 function resLabel(r){return `${norm(F(r,"Nom","nom"))||"Ressource"}${norm(F(r,"Email","email"))?` · ${norm(F(r,"Email","email"))}`:""}`}
 async function renderManagersAdmin(){
-  if(!S.isOwner)return;
+  if(!(S.isAdmin||S.isOwner))return;
   const exists=await managerTableExists();
   $("managerAdminArea")?.classList.toggle("hidden",!exists);
   if($("managerTableState")) $("managerTableState").textContent=exists?"Table Managers_Ressources détectée.":"Table Managers_Ressources introuvable.";
@@ -335,12 +336,12 @@ async function renderManagersAdmin(){
   $("managedResourceSelect").innerHTML='<option value="">— Ressource —</option>'+opts;
   $("managerRows").innerHTML=links.filter(x=>F(x,"Actif")!==false).map(x=>{
     const m=S.resources.find(r=>Number(r.id)===rid(F(x,"Manager"))), rr=S.resources.find(r=>Number(r.id)===rid(F(x,"Ressource")));
-    return `<tr><td>${esc(m?resLabel(m):"—")}</td><td>${esc(rr?resLabel(rr):"—")}</td><td>Actif</td><td><button class="table-action" data-manager-off="${x.id}">Retirer</button></td></tr>`;
+    return `<tr><td>${esc(m?resLabel(m):"—")}</td><td>${esc(rr?resLabel(rr):"—")}</td><td>Actif</td><td><button class="table-action manager-remove" type="button" data-manager-off="${x.id}">Retirer</button></td></tr>`;
   }).join("")||'<tr><td colspan="4">Aucune affectation.</td></tr>';
-  document.querySelectorAll("[data-manager-off]").forEach(b=>b.onclick=()=>disableManagerLink(+b.dataset.managerOff).catch(managerAdminError));
+  document.querySelectorAll("[data-manager-off]").forEach(b=>b.onclick=()=>removeManagerLink(+b.dataset.managerOff).catch(managerAdminError));
 }
 async function addManagerLink(){
-  if(!S.isOwner)return;
+  if(!(S.isAdmin||S.isOwner))return;
   const m=+$("managerSelect").value,r=+$("managedResourceSelect").value;
   if(!m||!r)return managerAdminError(new Error("Sélectionnez un manager et une ressource."));
   if(m===r)return managerAdminError(new Error("Le manager et la ressource doivent être différents."));
@@ -350,10 +351,15 @@ async function addManagerLink(){
   else await grist.getTable(T.managerResources).create({fields:{Manager:m,Ressource:r,Actif:true}});
   await renderManagersAdmin();
 }
-async function disableManagerLink(id){
-  if(!S.isOwner)return;
-  await grist.getTable(T.managerResources).update({id,fields:{Actif:false}});
+async function removeManagerLink(id){
+  if(!(S.isAdmin||S.isOwner))return;
+  if(!id)throw new Error("Affectation invalide.");
+  await grist.docApi.applyUserActions([["RemoveRecord",T.managerResources,id]]);
+  if(S.viewAs && !S.managerLinks.some(x=>Number(x.id)!==Number(id) && Number(rid(F(x,"Ressource")))===Number(S.viewAs.id))){
+    S.viewAs=null;
+  }
   await renderManagersAdmin();
+  await loadManagerContext();
 }
 
 function managerTargetLabel(id){
@@ -432,7 +438,8 @@ function setViewAs(id){
 
 function showView(name){
   if(S.viewAs && name==="new")return;
-  if(["resources","managers","motifs","acl","sync"].includes(name)&&!S.isOwner)return;
+  if(["resources","motifs","acl","sync"].includes(name)&&!S.isOwner)return;
+  if(name==="managers"&&!(S.isAdmin||S.isOwner))return;
   if(name==="labels"&&!(S.isAdmin||S.isOwner))return;
   if(name==="all"&&!(S.isAdmin||S.isOwner))return;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
