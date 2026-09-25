@@ -1,4 +1,4 @@
-const VERSION="V1.29";
+const VERSION="V1.30";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -169,21 +169,39 @@ async function loadLabels(){
   const exists=await labelsTableExists();
   S.labelsReady=exists;
   S.labels=exists?await table(T.labels):[];
-  $("labelsSetup")?.classList.toggle("hidden",exists);
+  $("labelsSetup")?.classList.remove("hidden");
+  const setupText=$("labelsSetupText");
+  if(setupText)setupText.innerHTML=exists
+    ? `<strong>PARAM_LIBELLES</strong> est disponible · ${S.labels.length} libellé(s) enregistré(s).`
+    : `<strong>PARAM_LIBELLES</strong> n’existe pas encore. Cliquez sur « Initialiser / compléter la table ».`;
+  const initBtn=$("initLabelsBtn");
+  if(initBtn) initBtn.textContent=exists?"Compléter / vérifier la table":"Initialiser la table";
   $("labelsManager")?.classList.toggle("hidden",!exists);
   if(exists){renderLabelsManager();applyLabels()}
 }
 async function initLabelsTable(){
   if(!(S.isAdmin||S.isOwner))return;
-  if(!await labelsTableExists()){
-    await grist.docApi.applyUserActions([["AddTable",T.labels,[
-      {id:"Cle",type:"Text"},{id:"Categorie",type:"Text"},{id:"Libelle",type:"Text"}
-    ]]]);
+  const btn=$("initLabelsBtn");
+  const previous=btn?.textContent;
+  if(btn){btn.disabled=true;btn.textContent="Initialisation…";}
+  try{
+    if(!await labelsTableExists()){
+      await grist.docApi.applyUserActions([["AddTable",T.labels,[
+        {id:"Cle",type:"Text"},{id:"Categorie",type:"Text"},{id:"Libelle",type:"Text"}
+      ]]]);
+    }
+    const existing=await table(T.labels), keys=new Set(existing.map(r=>norm(F(r,"Cle"))));
+    const actions=LABEL_DEFS.filter(([k])=>!keys.has(k)).map(([k,c,d])=>["AddRecord",T.labels,null,{Cle:k,Categorie:c,Libelle:d}]);
+    if(actions.length)await grist.docApi.applyUserActions(actions);
+    await loadLabels();
+    showLabelMsg("Table PARAM_LIBELLES initialisée et vérifiée.","success");
+  }catch(e){
+    const msg=$("labelsSetupText");
+    if(msg)msg.innerHTML=`Impossible d’initialiser <strong>PARAM_LIBELLES</strong>. Vérifiez que votre compte Grist peut créer/modifier les tables.`;
+    throw e;
+  }finally{
+    if(btn){btn.disabled=false;if(!btn.textContent||btn.textContent==="Initialisation…")btn.textContent=previous||"Initialiser / compléter la table";}
   }
-  const existing=await table(T.labels), keys=new Set(existing.map(r=>norm(F(r,"Cle"))));
-  const actions=LABEL_DEFS.filter(([k])=>!keys.has(k)).map(([k,c,d])=>["AddRecord",T.labels,null,{Cle:k,Categorie:c,Libelle:d}]);
-  if(actions.length)await grist.docApi.applyUserActions(actions);
-  await loadLabels();
 }
 function renderLabelsManager(filter=""){
   if(!S.labelsReady)return;

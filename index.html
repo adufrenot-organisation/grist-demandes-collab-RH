@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.29</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.30</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.29</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.30</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -70,8 +70,12 @@
 
 <section id="view-labels" class="view adminview">
  <div class="pagehead"><div><span class="pill adminpill">PERSONNALISATION</span><h2>Libellés de l’application</h2><p>Modifiez les textes affichés sans changer les clés techniques ni le fonctionnement.</p></div></div>
- <div id="labelsSetup" class="card hidden">
-   <div class="section-head"><div><h3>Initialiser les libellés</h3><p>La table locale <strong>PARAM_LIBELLES</strong> n’existe pas encore.</p></div><button id="initLabelsBtn" class="primary">Initialiser</button></div>
+ <div id="labelsSetup" class="card labels-setup-card">
+   <div class="section-head">
+     <div><h3>Table des libellés</h3><p id="labelsSetupText">Vérification de <strong>PARAM_LIBELLES</strong>…</p></div>
+     <button id="initLabelsBtn" class="primary">Initialiser / compléter la table</button>
+   </div>
+   <div class="setup-hint">Cette action crée la table si elle n’existe pas et ajoute les clés de libellés manquantes sans supprimer les personnalisations existantes.</div>
  </div>
  <div id="labelsManager" class="card hidden">
    <div class="labels-toolbar"><input id="labelsSearch" type="search" placeholder="Rechercher un libellé…"><button id="resetAllLabels" class="secondary">Réinitialiser tout</button></div>

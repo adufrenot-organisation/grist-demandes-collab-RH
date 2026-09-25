@@ -205,3 +205,13 @@
   .labels-toolbar input{max-width:none}
   .labels-table .label-input{min-width:180px}
 }
+
+/* V1.30 — initialisation PARAM_LIBELLES clairement visible */
+.labels-setup-card{margin-bottom:18px!important}
+.labels-setup-card .section-head{align-items:center}
+.labels-setup-card .setup-hint{margin-top:12px;padding-top:12px;border-top:1px solid var(--line,#e5eaf0);font-size:13px;line-height:1.45;color:#637b9a}
+.labels-setup-card #initLabelsBtn{white-space:nowrap}
+@media(max-width:760px){
+  .labels-setup-card .section-head{align-items:stretch;flex-direction:column;gap:14px}
+  .labels-setup-card #initLabelsBtn{width:100%}
+}
