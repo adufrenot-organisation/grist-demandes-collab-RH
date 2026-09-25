@@ -1,4 +1,4 @@
-const VERSION="V1.33";
+const VERSION="V1.34";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],viewAs:null,realPerson:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -288,7 +288,20 @@ async function initManagerTable(){
   await loadManagerLinks(); renderManagerAdmin(); renderViewAs();
 }
 async function loadManagerLinks(){
-  S.managerLinks=await managerTableExists()?await table(T.managerResources):[];
+  S.managerLinks=[];
+  try{
+    if(!await managerTableExists())return;
+    const raw=await grist.docApi.fetchTable(T.managerResources);
+    const ids=raw?.id||[];
+    S.managerLinks=ids.map((id,i)=>{
+      const row={id};
+      Object.keys(raw||{}).forEach(k=>{if(k!=="id"&&Array.isArray(raw[k]))row[k]=raw[k][i]});
+      return row;
+    });
+  }catch(e){
+    console.warn("Managers_Ressources ignorée pendant le chargement:",e);
+    S.managerLinks=[];
+  }
 }
 function resourceLabel(r){return `${norm(F(r,"Nom","nom"))||"Ressource"}${norm(F(r,"Email","email"))?` · ${norm(F(r,"Email","email"))}`:""}`}
 function managedResourcesFor(person=S.realPerson||S.person){
@@ -335,7 +348,8 @@ function applyReadOnlyViewAs(){
 }
 async function renderManagerAdmin(){
   if(!S.isOwner)return;
-  const exists=await managerTableExists();
+  let exists=false;
+  try{exists=await managerTableExists()}catch(e){console.warn(e)}
   $("managerManager")?.classList.toggle("hidden",!exists);
   if($("managerSetupText"))$("managerSetupText").innerHTML=exists?`<strong>Managers_Ressources</strong> est disponible.`:`<strong>Managers_Ressources</strong> n’existe pas encore.`;
   if(!exists)return;
@@ -536,7 +550,10 @@ async function boot(){
   $("syncNow").onclick=async()=>{await syncAll("manual");await load()};
   await detectOwner();
   await syncAll("startup")
-  await identify();await load();await loadLabels();showView(S.isOwner&&!S.person?"acl":"home");
+  await identify();
+  await load();
+  try{await loadLabels()}catch(e){console.warn("Libellés optionnels indisponibles:",e)}
+  showView(S.isOwner&&!S.person?"acl":"home");
 }
 boot().catch(fatal);
 
