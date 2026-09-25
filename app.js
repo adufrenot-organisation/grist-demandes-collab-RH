@@ -1,4 +1,4 @@
-const VERSION="V1.37";
+const VERSION="V1.38";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -93,16 +93,49 @@ function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(con
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
 async function identify(){
   const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
+
+  // Owner : le bootstrap ADMIN_PORTAIL reste prioritaire et ne dépend pas
+  // du nombre de ressources rendues visibles par les ACL.
   if(S.isOwner && rr.length!==1){
     S.person=null;
     S.user={email:S.ownerBootstrap?.email||"",name:S.ownerBootstrap?.name||"Owner"};
     return;
   }
-  if(rr.length===0)throw new Error("Aucune ressource autorisée pour cet utilisateur. Vérifiez la règle Ressources : user.Email == rec.Email.");
-  if(rr.length>1)throw new Error("Plusieurs ressources sont visibles. Les règles d’accès doivent limiter Ressources à la ligne de l’utilisateur connecté.");
-  S.person=rr[0];
+
+  if(rr.length===0){
+    throw new Error("Aucune ressource autorisée pour cet utilisateur.");
+  }
+
+  // Cas historique collaborateur : une seule ligne Ressources visible.
+  if(rr.length===1){
+    S.person=rr[0];
+  } else {
+    // Cas Manager : les ACL peuvent légitimement rendre visibles le manager
+    // ET ses ressources. On identifie alors la ligne du manager grâce à
+    // Managers_Ressources, sans exiger que Ressources ne contienne qu'une ligne.
+    let links=[];
+    try{
+      links=(await table(T.managerResources)).filter(r=>F(r,"Actif")!==false);
+    }catch(e){
+      console.warn("Managers_Ressources indisponible pendant l’identification:",e);
+    }
+
+    const visibleIds=new Set(rr.map(r=>Number(r.id)));
+    const managerIds=[...new Set(
+      links.map(r=>rid(F(r,"Manager"))).filter(id=>id && visibleIds.has(Number(id)))
+    )];
+
+    if(managerIds.length===1){
+      S.person=rr.find(r=>Number(r.id)===Number(managerIds[0]))||null;
+    }
+
+    if(!S.person){
+      throw new Error("Impossible d’identifier la ressource connectée : plusieurs lignes Ressources sont visibles et aucun manager unique n’est identifiable dans Managers_Ressources.");
+    }
+  }
+
   const mail=norm(F(S.person,"Email","email"));
-  S.user={email:mail,name:norm(F(S.person,"Nom"))||mail||"Collaborateur"};
+  S.user={email:mail,name:norm(F(S.person,"Nom","nom"))||mail||"Collaborateur"};
 }
 async function load(){
   const [q,m,res]=await Promise.all([table(T.requests),table(T.motifs),table(T.resources)]);
@@ -146,8 +179,7 @@ const LABEL_DEFS=[
  ["labels.table","Libellés","Table des libellés"],["labels.init","Libellés","Initialiser la table"],["labels.complete","Libellés","Compléter / vérifier la table"],
  ["acl.pill","ACL","SECURITY CENTER"],["acl.title","ACL","ACL & Permissions"],["acl.audit","ACL","Audit des permissions"],
  ["motifs.pill","Motifs","RÉFÉRENTIEL LOCAL"],["motifs.new","Motifs","Nouveau motif"],["motifs.active","Motifs","Motif actif"],
- ["resources.title","Ressources","Ressources"]
-
+ ["resources.title","Ressources","Ressources"],
  ["nav.managers","Menu","Managers & Ressources"],["page.managers","Pages","Managers & Ressources"],];
 const LABEL_BY_DEFAULT=Object.fromEntries(LABEL_DEFS.map(([k,c,d])=>[d,k]));
 function labelMap(){return Object.fromEntries((S.labels||[]).map(r=>[norm(F(r,"Cle")),norm(F(r,"Libelle"))]).filter(([k,v])=>k&&v))}
@@ -174,7 +206,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",all:"nav.all",resources:"nav.resources",motifs:"nav.motifs",acl:"nav.acl",labels:"nav.labels"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",all:"nav.all",resources:"nav.resources",managers:"nav.managers",motifs:"nav.motifs",acl:"nav.acl",labels:"nav.labels"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -348,7 +380,8 @@ async function loadManagerContext(){
   try{
     const raw=await grist.docApi.fetchTable(T.managerResources), links=rowsFromFetch(raw);
     S.managerLinks=links.filter(x=>F(x,"Actif")!==false && rid(F(x,"Manager"))===Number(S.person.id));
-    S.managedResources=S.managerLinks.map(x=>({id:rid(F(x,"Ressource"))})).filter(x=>x.id);
+    const ids=[...new Set(S.managerLinks.map(x=>rid(F(x,"Ressource"))).filter(Boolean))];
+    S.managedResources=ids.map(id=>({id}));
     applyViewAs(); render();
   }catch(e){
     console.warn("Mode manager indisponible:",e);
