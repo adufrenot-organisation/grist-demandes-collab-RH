@@ -471,3 +471,91 @@ main > header{
     padding:10px 20px 18px;
   }
 }
+
+
+/* V1.43 — correction réelle du DOM Managers & Ressources
+   Le HTML utilise .manager-form (et non #managerForm). */
+#view-managers .section-head{
+  padding:22px 28px 12px;
+}
+#view-managers .manager-form{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+  gap:16px;
+  align-items:end;
+  margin:0;
+  padding:12px 28px 20px;
+}
+#view-managers .manager-form label{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  min-width:0;
+  margin:0;
+  font-size:12px;
+  font-weight:700;
+  color:#536079;
+}
+#view-managers .manager-form select{
+  width:100%;
+  min-width:0;
+  height:46px;
+  margin:0;
+}
+#view-managers .manager-form .primary{
+  height:46px;
+  min-width:142px;
+  margin:0;
+  padding:0 20px;
+  align-self:end;
+  white-space:nowrap;
+}
+#view-managers .tablewrap{
+  margin:0;
+  border-top:1px solid var(--line);
+}
+#view-managers .tablewrap table{
+  margin:0;
+}
+#view-managers .tablewrap th{
+  padding:13px 28px;
+  border-top:0;
+}
+#view-managers .tablewrap td{
+  padding:14px 28px;
+}
+#view-managers #managerRows:empty::after{
+  content:"Aucune affectation.";
+  display:block;
+  padding:18px 28px;
+  color:var(--muted);
+  font-size:13px;
+}
+@media(max-width:980px){
+  #view-managers .manager-form{
+    grid-template-columns:1fr 1fr;
+  }
+  #view-managers .manager-form .primary{
+    grid-column:1/-1;
+    justify-self:start;
+  }
+}
+@media(max-width:680px){
+  #view-managers .section-head{
+    padding:18px 20px 10px;
+  }
+  #view-managers .manager-form{
+    grid-template-columns:1fr;
+    gap:12px;
+    padding:10px 20px 18px;
+  }
+  #view-managers .manager-form .primary{
+    grid-column:auto;
+    width:100%;
+  }
+  #view-managers .tablewrap th,
+  #view-managers .tablewrap td{
+    padding-left:20px;
+    padding-right:20px;
+  }
+}
