@@ -576,3 +576,108 @@ main > header{
   opacity:.45!important;
   cursor:not-allowed!important;
 }
+
+
+/* V1.45 — Voir comme au-dessus + alignement du titre */
+main > header.app-header{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:10px;
+}
+main > header.app-header .header-actions{
+  width:100%;
+  justify-content:flex-end;
+}
+main > header.app-header .header-identity{
+  width:100%;
+}
+main > header.app-header .header-identity h1,
+main > header.app-header .header-identity p{
+  margin-left:0;
+}
+/* Même axe gauche pour l'en-tête et la vue Managers */
+main > header.app-header,
+#view-managers{
+  width:min(1180px, calc(100% - 56px));
+  max-width:1180px;
+  margin-left:auto;
+  margin-right:auto;
+}
+@media(max-width:1100px){
+  main > header.app-header,
+  #view-managers{
+    width:calc(100% - 36px);
+  }
+}
+@media(max-width:760px){
+  main > header.app-header,
+  #view-managers{
+    width:calc(100% - 24px);
+  }
+  main > header.app-header .header-actions{
+    justify-content:space-between;
+  }
+}
+
+
+/* V1.46 — cohérence globale de tous les écrans */
+:root{
+  --content-max:1180px;
+  --content-gutter:56px;
+}
+main > header.app-header,
+main > .view{
+  width:min(var(--content-max), calc(100% - var(--content-gutter)))!important;
+  max-width:var(--content-max)!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  box-sizing:border-box;
+}
+/* Neutralise les largeurs spécifiques historiques des vues */
+#view-home,
+#view-new,
+#view-mine,
+#view-all,
+#view-resources,
+#view-managers,
+#view-motifs,
+#view-acl,
+#view-labels,
+#view-sync{
+  width:min(var(--content-max), calc(100% - var(--content-gutter)))!important;
+  max-width:var(--content-max)!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+/* Titres / héros : même axe de départ sur chaque écran */
+main > .view > .hero,
+main > .view > .page-head,
+main > .view > .section-title{
+  margin-left:0!important;
+  margin-right:0!important;
+}
+/* Le bandeau Voir comme reste dans la ligne utilitaire supérieure */
+main > header.app-header{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+}
+main > header.app-header .header-actions{
+  order:0;
+  width:100%;
+  justify-content:flex-end;
+}
+main > header.app-header .header-identity{
+  order:1;
+  width:100%;
+}
+@media(max-width:1100px){
+  :root{--content-gutter:36px}
+}
+@media(max-width:760px){
+  :root{--content-gutter:24px}
+  main > header.app-header .header-actions{
+    justify-content:space-between;
+  }
+}
