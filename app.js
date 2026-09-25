@@ -1,6 +1,6 @@
-const VERSION="V1.31";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false};
+const VERSION="V1.33";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],viewAs:null,realPerson:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 function syncConfig(){
   // Configuration utilisateur/session uniquement. Ne jamais embarquer une clé maître dans le code.
@@ -107,7 +107,8 @@ async function identify(){
 async function load(){
   const [q,m,res]=await Promise.all([table(T.requests),table(T.motifs),table(T.resources)]);
   S.motifs=m; S.resources=res;
-  S.isAdmin=norm(F(S.person,"Profil","profil")).toUpperCase()==="ADMIN";
+  if(!S.realPerson)S.realPerson=S.person;
+  S.isAdmin=norm(F(S.realPerson,"Profil","profil")).toUpperCase()==="ADMIN";
   $("adminNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
   document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!S.isOwner));
   S.allRequests=q;
@@ -118,6 +119,7 @@ async function load(){
   $("allRequestsNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
   render();
   applyLabels();
+  try{await loadManagerLinks();renderViewAs()}catch(e){console.warn("Managers_Ressources indisponible:",e)}
 }
 function motifName(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Libelle","Nom","Code")||`Motif ${id}`):"—"}
 function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Code")):""}
@@ -147,12 +149,18 @@ const LABEL_DEFS=[
  ["acl.pill","ACL","SECURITY CENTER"],["acl.title","ACL","ACL & Permissions"],["acl.audit","ACL","Audit des permissions"],
  ["motifs.pill","Motifs","RÉFÉRENTIEL LOCAL"],["motifs.new","Motifs","Nouveau motif"],["motifs.active","Motifs","Motif actif"],
  ["resources.title","Ressources","Ressources"]
-];
+
+ ["nav.managers","Menu","Managers & Ressources"],["page.managers","Pages","Managers & Ressources"],["viewas.label","Manager","Voir comme"],["viewas.self","Manager","Moi-même"],["viewas.readonly","Manager","Mode aperçu ressource · lecture seule"],];
 const LABEL_BY_DEFAULT=Object.fromEntries(LABEL_DEFS.map(([k,c,d])=>[d,k]));
 function labelMap(){return Object.fromEntries((S.labels||[]).map(r=>[norm(F(r,"Cle")),norm(F(r,"Libelle"))]).filter(([k,v])=>k&&v))}
 function L(key,fallback=""){return labelMap()[key]||fallback||LABEL_DEFS.find(x=>x[0]===key)?.[2]||key}
 function applyLabels(root=document){
   const map=labelMap();
+  root.querySelectorAll?.("[data-label-key]").forEach(el=>{
+    const key=el.dataset.labelKey;
+    const def=LABEL_DEFS.find(x=>x[0]===key);
+    if(def)el.textContent=L(key,def[2]);
+  });
   const replacements=new Map(LABEL_DEFS.map(([k,c,d])=>[d.toLocaleLowerCase("fr"),map[k]||d]));
   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
   const nodes=[]; while(walker.nextNode())nodes.push(walker.currentNode);
@@ -267,16 +275,111 @@ function showLabelMsg(text,type=""){
   const el=$("labelsMsg"); if(!el)return; el.textContent=text; el.className=`alert ${type}`; setTimeout(()=>el.classList.add("hidden"),2500);
 }
 
+
+// V1.33 — affectations locales Manager → Ressources et aperçu "Voir comme"
+async function managerTableExists(){try{await grist.docApi.fetchTable(T.managerResources);return true}catch{return false}}
+async function initManagerTable(){
+  if(!S.isOwner)return;
+  if(!await managerTableExists()){
+    await grist.docApi.applyUserActions([["AddTable",T.managerResources,[
+      {id:"Manager",type:"Ref:Ressources"},{id:"Ressource",type:"Ref:Ressources"},{id:"Actif",type:"Bool"}
+    ]]]);
+  }
+  await loadManagerLinks(); renderManagerAdmin(); renderViewAs();
+}
+async function loadManagerLinks(){
+  S.managerLinks=await managerTableExists()?await table(T.managerResources):[];
+}
+function resourceLabel(r){return `${norm(F(r,"Nom","nom"))||"Ressource"}${norm(F(r,"Email","email"))?` · ${norm(F(r,"Email","email"))}`:""}`}
+function managedResourcesFor(person=S.realPerson||S.person){
+  if(!person)return [];
+  const ids=new Set(S.managerLinks.filter(x=>F(x,"Actif")!==false&&rid(F(x,"Manager"))===Number(person.id)).map(x=>rid(F(x,"Ressource"))));
+  return S.resources.filter(r=>ids.has(Number(r.id))&&F(r,"Actif","actif")!==false);
+}
+function renderViewAs(){
+  const bar=$("viewAsBar"),sel=$("viewAsSelect"); if(!bar||!sel)return;
+  const managed=managedResourcesFor();
+  bar.classList.toggle("hidden",managed.length===0&&!S.viewAs);
+  sel.innerHTML=`<option value="">${esc(L("viewas.self","Moi-même"))}</option>`+managed.map(r=>`<option value="${r.id}">${esc(resourceLabel(r))}</option>`).join("");
+  sel.value=S.viewAs?String(S.viewAs.id):"";
+  $("exitViewAs")?.classList.toggle("hidden",!S.viewAs);
+}
+function setViewAs(id){
+  const real=S.realPerson||S.person;
+  if(!id){S.viewAs=null;S.person=real}
+  else{
+    const allowed=managedResourcesFor(real).find(r=>Number(r.id)===Number(id));
+    if(!allowed)return;
+    S.viewAs=allowed; S.person=allowed;
+  }
+  applyPersonContext();
+}
+function applyPersonContext(){
+  const q=S.allRequests||[];
+  S.myRequests=S.person?q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id)):[];
+  S.requests=S.viewAs?S.myRequests:(S.isAdmin?q:S.myRequests);
+  render();
+  renderViewAs();
+  applyReadOnlyViewAs();
+  showView("mine");
+}
+function applyReadOnlyViewAs(){
+  const ro=!!S.viewAs;
+  document.body.classList.toggle("view-as-readonly",ro);
+  ["newBtn","save","cancelEdit"].forEach(id=>$(id)?.classList.toggle("hidden",ro));
+  document.querySelector('.nav[data-view="new"]')?.classList.toggle("hidden",ro);
+  if(ro){
+    document.querySelectorAll("[data-e],[data-c]").forEach(el=>el.classList.add("hidden"));
+    $("identity").textContent=`${resourceLabel(S.viewAs)} · aperçu par ${S.user.name||S.user.email}`;
+  }
+}
+async function renderManagerAdmin(){
+  if(!S.isOwner)return;
+  const exists=await managerTableExists();
+  $("managerManager")?.classList.toggle("hidden",!exists);
+  if($("managerSetupText"))$("managerSetupText").innerHTML=exists?`<strong>Managers_Ressources</strong> est disponible.`:`<strong>Managers_Ressources</strong> n’existe pas encore.`;
+  if(!exists)return;
+  const opts=S.resources.filter(r=>F(r,"Actif","actif")!==false).map(r=>`<option value="${r.id}">${esc(resourceLabel(r))}</option>`).join("");
+  $("managerSelect").innerHTML='<option value="">— Manager —</option>'+opts;
+  $("managedResourceSelect").innerHTML='<option value="">— Ressource —</option>'+opts;
+  $("managerRows").innerHTML=S.managerLinks.length?S.managerLinks.map(x=>{
+    const m=S.resources.find(r=>Number(r.id)===rid(F(x,"Manager"))), rr=S.resources.find(r=>Number(r.id)===rid(F(x,"Ressource")));
+    return `<tr><td>${esc(m?resourceLabel(m):"—")}</td><td>${esc(rr?resourceLabel(rr):"—")}</td><td>${F(x,"Actif")===false?"Non":"Oui"}</td><td><button class="table-action" data-unlink="${x.id}">Retirer</button></td></tr>`;
+  }).join(""):'<tr><td colspan="4">Aucune affectation.</td></tr>';
+  document.querySelectorAll("[data-unlink]").forEach(b=>b.onclick=()=>removeManagerLink(+b.dataset.unlink).catch(fatal));
+}
+async function addManagerLink(){
+  if(!S.isOwner)return;
+  const m=+$("managerSelect").value,r=+$("managedResourceSelect").value;
+  if(!m||!r)return;
+  if(m===r)throw new Error("Le manager et la ressource doivent être différents.");
+  const duplicate=S.managerLinks.find(x=>rid(F(x,"Manager"))===m&&rid(F(x,"Ressource"))===r);
+  if(duplicate){
+    if(F(duplicate,"Actif")===false)await grist.getTable(T.managerResources).update({id:duplicate.id,fields:{Actif:true}});
+  }else await grist.getTable(T.managerResources).create({fields:{Manager:m,Ressource:r,Actif:true}});
+  await loadManagerLinks();await renderManagerAdmin();renderViewAs();
+}
+async function removeManagerLink(id){
+  if(!S.isOwner)return;
+  await grist.getTable(T.managerResources).update({id,fields:{Actif:false}});
+  await loadManagerLinks();await renderManagerAdmin();renderViewAs();
+}
+
 function showView(name){
-  if(["resources","motifs","acl","sync"].includes(name)&&!S.isOwner)return;
+  if(["resources","managers","motifs","acl","sync"].includes(name)&&!S.isOwner)return;
   if(name==="labels"&&!(S.isAdmin||S.isOwner))return;
   if(name==="all"&&!(S.isAdmin||S.isOwner))return;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],labels:["page.labels","Libellés de l’application"]};
-  const t=titles[name]; $("pageTitle").textContent=t?L(t[0],t[1]):L("brand.title","Demandes RH");
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"]};
+  const t=titles[name];
+  const pageTitle=$("pageTitle");
+  if(pageTitle){
+    pageTitle.dataset.labelKey=t?t[0]:"brand.title";
+    pageTitle.textContent=t?L(t[0],t[1]):L("brand.title","Demandes RH");
+  }
 }
 async function detectOwner(){
   // Bootstrap V1.7 : l'espace Admin ne dépend plus des ACL Ressources.
@@ -377,7 +480,7 @@ function render(){
   $("kv").textContent=S.myRequests.filter(r=>st(r)==="VALIDEE").length;
   $("kr").textContent=S.myRequests.filter(r=>st(r)==="REFUSEE").length;
   const makeRows=(items,actions=true)=>items.length?items.map(r=>{const e=st(r)==="EN_ATTENTE";return `<tr><td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actions&&e?`<div class="rowactions"><button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button></div>`:""}</td></tr>`}).join(""):'<tr><td colspan="6">Aucune demande.</td></tr>';
-  $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),true);
+  $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),!S.viewAs);
   $("rowsHome").innerHTML=makeRows(S.myRequests.slice().reverse().slice(0,5),false);
   if($("rowsAll")) $("rowsAll").innerHTML=makeRows((S.isAdmin||S.isOwner)?S.allRequests.filter(r=>!S.person||rid(F(r,"Demandeur"))!==Number(S.person.id)).slice().reverse():[],false);
   document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{edit(+b.dataset.e);showView("new")});
@@ -385,8 +488,9 @@ function render(){
   renderAdmin();
 }
 function reset(){S.editing=null;$("formTitle").textContent="Nouvelle demande";$("save").textContent="Envoyer";$("type").value="CONGE";$("motif").value="";$("start").value="";$("end").value="";$("comment").value="";$("cancelEdit").classList.add("hidden")}
-function edit(id){const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE")return;S.editing=id;$("formTitle").textContent="Modifier ma demande";$("save").textContent="Enregistrer";$("type").value=F(r,"Type")||"CONGE";$("motif").value=rid(F(r,"Motif"));const iso=v=>new Date(Number(v)*1000).toISOString().slice(0,10);$("start").value=iso(F(r,"Date_Debut"));$("end").value=iso(F(r,"Date_Fin"));$("comment").value=F(r,"Commentaire_Demandeur")||"";$("cancelEdit").classList.remove("hidden")}
+function edit(id){if(S.viewAs)return;const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE")return;S.editing=id;$("formTitle").textContent="Modifier ma demande";$("save").textContent="Enregistrer";$("type").value=F(r,"Type")||"CONGE";$("motif").value=rid(F(r,"Motif"));const iso=v=>new Date(Number(v)*1000).toISOString().slice(0,10);$("start").value=iso(F(r,"Date_Debut"));$("end").value=iso(F(r,"Date_Fin"));$("comment").value=F(r,"Commentaire_Demandeur")||"";$("cancelEdit").classList.remove("hidden")}
 async function save(){
+  if(S.viewAs)throw new Error("Mode Voir comme en lecture seule.");
   const a=$("start").value,b=$("end").value,m=+$("motif").value;
   if(!a||!b||!m)return msg("Motif et période obligatoires.");
   if(b<a)return msg("La date de fin doit être ≥ à la date de début.");
@@ -405,7 +509,7 @@ async function save(){
   }
   reset();await load();
 }
-async function cancelReq(id){const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await syncRequestToCockpit(id);await load()}
+async function cancelReq(id){if(S.viewAs)return;const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await syncRequestToCockpit(id);await load()}
 function msg(t){$("msg").textContent=t;$("msg").classList.remove("hidden")}
 function fatal(e){$("fatal").textContent=e?.message||String(e);$("fatal").classList.remove("hidden");$("app").classList.add("hidden")}
 async function boot(){
@@ -419,6 +523,10 @@ async function boot(){
   $("syncResourcesBtn").onclick=adminSyncResources;
   $("applyAcl").onclick=()=>{};
   $("initLabelsBtn").onclick=()=>initLabelsTable().catch(fatal);
+  $("initManagersBtn").onclick=()=>initManagerTable().catch(fatal);
+  $("addManagerLink").onclick=()=>addManagerLink().catch(fatal);
+  $("viewAsSelect").onchange=e=>setViewAs(e.target.value);
+  $("exitViewAs").onclick=()=>setViewAs("");
   $("labelsSearch").oninput=e=>renderLabelsManager(e.target.value);
   $("resetAllLabels").onclick=()=>resetAllLabels().catch(fatal);
   $("save").onclick=()=>save().catch(fatal);
@@ -465,7 +573,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","all"],
-    admin: ["resources","motifs","acl","labels","sync"]
+    admin: ["resources","managers","motifs","acl","labels","sync"]
   };
 
   const applyAccordion = (open) => {

@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.31</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.33</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.31</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.33</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -16,6 +16,7 @@
   <div id="adminNav" class="hidden">
     <div class="nav-title admin-title" data-accordion="admin">ADMINISTRATION <span class="acc-chevron">⌄</span></div>
     <button class="accordion-item accordion-admin nav owner-only" data-view="resources">♙ <span>Ressources</span></button>
+    <button class="accordion-item accordion-admin nav owner-only" data-view="managers">♧ <span>Managers & Ressources</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="motifs">◇ <span>Motifs RH</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="acl">◈ <span>ACL & Permissions</span></button>
     <button class="accordion-item accordion-admin nav" data-view="labels">✎ <span>Libellés de l’application</span></button>
@@ -29,8 +30,10 @@
 <div class="foot"></div>
 </aside>
 <main class="content">
-<header><div><div class="eyebrow">ESPACE RH</div><h1 id="pageTitle">Bonjour</h1><p id="identity">Identification…</p></div><button id="refresh" class="iconbtn" title="Actualiser">↻</button></header>
+<header><div><div class="eyebrow">ESPACE RH</div><h1 id="pageTitle" data-label-key="page.home">Bonjour</h1><p id="identity">Identification…</p></div><button id="refresh" class="iconbtn" title="Actualiser">↻</button></header>
 <div id="fatal" class="alert danger hidden"></div>
+<div id="viewAsBar" class="viewas-bar hidden"><div><strong>Voir comme</strong><small>Mode aperçu ressource · lecture seule</small></div><select id="viewAsSelect"><option value="">Moi-même</option></select><button id="exitViewAs" class="secondary hidden">Revenir à moi</button></div>
+
 <section id="setup" class="card hidden"><h2>Initialisation</h2></section>
 <div id="app" class="hidden">
 <section id="view-home" class="view active">
@@ -48,7 +51,7 @@
  </div><div id="msg" class="alert hidden"></div><div class="actions"><button id="cancelEdit" class="secondary hidden">Annuler</button><button id="save" class="primary">Envoyer la demande</button></div></div>
 </section>
 <section id="view-mine" class="view">
- <div class="pagehead"><div><span class="pill">SUIVI</span><h2>Mes demandes</h2><p>Historique et état de traitement.</p></div><button id="newBtn" class="primary" data-go="new">＋ Nouvelle demande</button></div>
+ <div class="pagehead"><div><span class="pill">SUIVI</span><h2 data-label-key="mine.title">Mes demandes</h2><p>Historique et état de traitement.</p></div><button id="newBtn" class="primary" data-go="new">＋ Nouvelle demande</button></div>
  <div class="card"><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 </section>
 <section id="view-all" class="view">
@@ -60,6 +63,23 @@
 <div class="kpis admin-kpis"><div class="kpi"><small>RESSOURCES</small><strong id="resCount">0</strong><span>reçues</span></div><div class="kpi"><small>ACTIVES</small><strong id="resActive">0</strong><span>utilisables</span></div><div class="kpi"><small>ANOMALIES</small><strong id="resErrors">0</strong><span>à contrôler</span></div></div>
 <div class="card"><div class="section-head"><div><h3>Référentiel synchronisé</h3><p>Aucune création locale : Cockpit.Team reste maître.</p></div></div><div class="tablewrap"><table><thead><tr><th>Nom</th><th>Email</th><th>Équipe</th><th>Profil</th><th>État</th></tr></thead><tbody id="resourcesRows"></tbody></table></div></div>
 </section>
+
+<section id="view-managers" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">AFFECTATIONS LOCALES</span><h2>Managers & Ressources</h2><p>Désignez les ressources qu’un manager peut visualiser en mode « Voir comme ».</p></div></div>
+ <div id="managerSetup" class="card">
+  <div class="section-head"><div><h3>Table Managers_Ressources</h3><p id="managerSetupText">Vérification de la configuration…</p></div><button id="initManagersBtn" class="primary">Initialiser / compléter la table</button></div>
+ </div>
+ <div id="managerManager" class="card hidden">
+  <div class="manager-form">
+   <label>Manager<select id="managerSelect"></select></label>
+   <label>Ressource<select id="managedResourceSelect"></select></label>
+   <button id="addManagerLink" class="primary">＋ Affecter</button>
+  </div>
+  <div id="managerMsg" class="alert hidden"></div>
+  <div class="tablewrap"><table><thead><tr><th>Manager</th><th>Ressource</th><th>Actif</th><th></th></tr></thead><tbody id="managerRows"></tbody></table></div>
+ </div>
+</section>
+
 <section id="view-motifs" class="view adminview">
 <div class="pagehead"><div><span class="pill adminpill">RÉFÉRENTIEL LOCAL</span><h2>Motifs RH</h2><p>Catalogue propre au portail. Le Code assure la correspondance avec le Cockpit.</p></div><button id="newMotifBtn" class="primary">＋ Nouveau motif</button></div>
 <div class="card"><div class="tablewrap"><table><thead><tr><th>Code</th><th>Libellé</th><th>Description</th><th>État</th><th></th></tr></thead><tbody id="motifsRows"></tbody></table></div></div>
