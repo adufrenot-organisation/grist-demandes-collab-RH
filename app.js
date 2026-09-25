@@ -1,4 +1,4 @@
-const VERSION="V1.38";
+const VERSION="V1.39";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -375,17 +375,44 @@ function applyViewAs(){
   }
 }
 async function loadManagerContext(){
-  // Appelé uniquement APRES le boot normal : une erreur ici ne bloque jamais l'identification.
-  if(!S.person||S.isOwner)return;
+  // Appelé uniquement APRÈS le boot normal. Il ne peut pas bloquer l'identification.
   try{
     const raw=await grist.docApi.fetchTable(T.managerResources), links=rowsFromFetch(raw);
-    S.managerLinks=links.filter(x=>F(x,"Actif")!==false && rid(F(x,"Manager"))===Number(S.person.id));
-    const ids=[...new Set(S.managerLinks.map(x=>rid(F(x,"Ressource"))).filter(Boolean))];
-    S.managedResources=ids.map(id=>({id}));
-    applyViewAs(); render();
+
+    // Utilisateur standard/manager : S.person est déjà connu.
+    // Owner : identify() peut volontairement laisser S.person=null. Dans ce cas,
+    // on retrouve sa ligne Ressources par l'email du bootstrap ADMIN_PORTAIL.
+    let managerId=Number(S.person?.id||0);
+    if(!managerId && S.isOwner && S.user?.email){
+      const me=(S.resources||[]).find(r=>email(F(r,"Email","email"))===email(S.user.email));
+      if(me) managerId=Number(me.id);
+    }
+
+    if(!managerId){
+      S.managerLinks=[];S.managedResources=[];S.viewAs=null;
+      applyViewAs();
+      return;
+    }
+
+    S.managerLinks=links.filter(x=>
+      F(x,"Actif")!==false &&
+      Number(rid(F(x,"Manager")))===managerId
+    );
+
+    const ids=[...new Set(
+      S.managerLinks.map(x=>Number(rid(F(x,"Ressource")))).filter(Boolean)
+    )];
+
+    S.managedResources=ids
+      .filter(id=>(S.resources||[]).some(r=>Number(r.id)===id))
+      .map(id=>({id}));
+
+    applyViewAs();
+    render();
   }catch(e){
     console.warn("Mode manager indisponible:",e);
     S.managerLinks=[];S.managedResources=[];S.viewAs=null;
+    applyViewAs();
   }
 }
 function setViewAs(id){
