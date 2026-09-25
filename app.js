@@ -1,6 +1,6 @@
-const VERSION="V1.35";
+const VERSION="V1.36";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],viewAs:null,realPerson:null};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 function syncConfig(){
   // Configuration utilisateur/session uniquement. Ne jamais embarquer une clé maître dans le code.
@@ -107,8 +107,7 @@ async function identify(){
 async function load(){
   const [q,m,res]=await Promise.all([table(T.requests),table(T.motifs),table(T.resources)]);
   S.motifs=m; S.resources=res;
-  if(!S.realPerson)S.realPerson=S.person;
-  S.isAdmin=norm(F(S.realPerson,"Profil","profil")).toUpperCase()==="ADMIN";
+  S.isAdmin=norm(F(S.person,"Profil","profil")).toUpperCase()==="ADMIN";
   $("adminNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
   document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!S.isOwner));
   S.allRequests=q;
@@ -149,7 +148,7 @@ const LABEL_DEFS=[
  ["motifs.pill","Motifs","RÉFÉRENTIEL LOCAL"],["motifs.new","Motifs","Nouveau motif"],["motifs.active","Motifs","Motif actif"],
  ["resources.title","Ressources","Ressources"]
 
- ["nav.managers","Menu","Managers & Ressources"],["page.managers","Pages","Managers & Ressources"],["viewas.label","Manager","Voir comme"],["viewas.self","Manager","Moi-même"],["viewas.readonly","Manager","Mode aperçu ressource · lecture seule"],];
+ ["nav.managers","Menu","Managers & Ressources"],["page.managers","Pages","Managers & Ressources"],];
 const LABEL_BY_DEFAULT=Object.fromEntries(LABEL_DEFS.map(([k,c,d])=>[d,k]));
 function labelMap(){return Object.fromEntries((S.labels||[]).map(r=>[norm(F(r,"Cle")),norm(F(r,"Libelle"))]).filter(([k,v])=>k&&v))}
 function L(key,fallback=""){return labelMap()[key]||fallback||LABEL_DEFS.find(x=>x[0]===key)?.[2]||key}
@@ -275,107 +274,61 @@ function showLabelMsg(text,type=""){
 }
 
 
-// V1.33 — affectations locales Manager → Ressources et aperçu "Voir comme"
-async function managerTableExists(){try{await grist.docApi.fetchTable(T.managerResources);return true}catch{return false}}
-async function initManagerTable(){
-  if(!S.isOwner)return;
-  if(!await managerTableExists()){
-    await grist.docApi.applyUserActions([["AddTable",T.managerResources,[
-      {id:"Manager",type:"Ref:Ressources"},{id:"Ressource",type:"Ref:Ressources"},{id:"Actif",type:"Bool"}
-    ]]]);
-  }
-  await loadManagerLinks(); renderManagerAdmin(); renderViewAs();
+// V1.36 — gestion locale des affectations, sans toucher au démarrage du portail
+async function managerTableExists(){
+  try{await grist.docApi.fetchTable(T.managerResources);return true}catch(e){return false}
 }
-async function loadManagerLinks(){
-  S.managerLinks=[];
+function rowsFromFetch(raw){
+  const ids=raw?.id||[];
+  return ids.map((id,i)=>{const r={id};Object.keys(raw||{}).forEach(k=>{if(k!=="id"&&Array.isArray(raw[k]))r[k]=raw[k][i]});return r});
+}
+async function initManagersTable(){
+  if(!S.isOwner)return;
   try{
-    if(!await managerTableExists())return;
-    const raw=await grist.docApi.fetchTable(T.managerResources);
-    const ids=raw?.id||[];
-    S.managerLinks=ids.map((id,i)=>{
-      const row={id};
-      Object.keys(raw||{}).forEach(k=>{if(k!=="id"&&Array.isArray(raw[k]))row[k]=raw[k][i]});
-      return row;
-    });
-  }catch(e){
-    console.warn("Managers_Ressources ignorée pendant le chargement:",e);
-    S.managerLinks=[];
-  }
+    if(!await managerTableExists()){
+      await grist.docApi.applyUserActions([["AddTable",T.managerResources,[
+        {id:"Manager",type:"Ref:Ressources"},{id:"Ressource",type:"Ref:Ressources"},{id:"Actif",type:"Bool"}
+      ]]]);
+    }
+    await renderManagersAdmin();
+  }catch(e){managerAdminError(e)}
 }
-function resourceLabel(r){return `${norm(F(r,"Nom","nom"))||"Ressource"}${norm(F(r,"Email","email"))?` · ${norm(F(r,"Email","email"))}`:""}`}
-function managedResourcesFor(person=S.realPerson||S.person){
-  if(!person)return [];
-  const ids=new Set(S.managerLinks.filter(x=>F(x,"Actif")!==false&&rid(F(x,"Manager"))===Number(person.id)).map(x=>rid(F(x,"Ressource"))));
-  return S.resources.filter(r=>ids.has(Number(r.id))&&F(r,"Actif","actif")!==false);
+function managerAdminError(e){
+  const el=$("managerAdminMsg");if(!el)return;
+  el.textContent=e?.message||String(e);el.className="alert danger";
 }
-function renderViewAs(){
-  const bar=$("viewAsBar"),sel=$("viewAsSelect"); if(!bar||!sel||!S.user||!Array.isArray(S.resources))return;
-  const managed=managedResourcesFor();
-  bar.classList.toggle("hidden",managed.length===0&&!S.viewAs);
-  sel.innerHTML=`<option value="">${esc(L("viewas.self","Moi-même"))}</option>`+managed.map(r=>`<option value="${r.id}">${esc(resourceLabel(r))}</option>`).join("");
-  sel.value=S.viewAs?String(S.viewAs.id):"";
-  $("exitViewAs")?.classList.toggle("hidden",!S.viewAs);
-}
-function setViewAs(id){
-  const real=S.realPerson||S.person;
-  if(!id){S.viewAs=null;S.person=real}
-  else{
-    const allowed=managedResourcesFor(real).find(r=>Number(r.id)===Number(id));
-    if(!allowed)return;
-    S.viewAs=allowed; S.person=allowed;
-  }
-  applyPersonContext();
-}
-function applyPersonContext(){
-  const q=S.allRequests||[];
-  S.myRequests=S.person?q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id)):[];
-  S.requests=S.viewAs?S.myRequests:(S.isAdmin?q:S.myRequests);
-  render();
-  renderViewAs();
-  applyReadOnlyViewAs();
-  showView("mine");
-}
-function applyReadOnlyViewAs(){
-  const ro=!!S.viewAs;
-  document.body.classList.toggle("view-as-readonly",ro);
-  ["newBtn","save","cancelEdit"].forEach(id=>$(id)?.classList.toggle("hidden",ro));
-  document.querySelector('.nav[data-view="new"]')?.classList.toggle("hidden",ro);
-  if(ro){
-    document.querySelectorAll("[data-e],[data-c]").forEach(el=>el.classList.add("hidden"));
-    $("identity").textContent=`${resourceLabel(S.viewAs)} · aperçu par ${S.user.name||S.user.email}`;
-  }
-}
-async function renderManagerAdmin(){
+function resLabel(r){return `${norm(F(r,"Nom","nom"))||"Ressource"}${norm(F(r,"Email","email"))?` · ${norm(F(r,"Email","email"))}`:""}`}
+async function renderManagersAdmin(){
   if(!S.isOwner)return;
-  let exists=false;
-  try{exists=await managerTableExists()}catch(e){console.warn("Managers_Ressources:",e);return}
-  $("managerManager")?.classList.toggle("hidden",!exists);
-  if($("managerSetupText"))$("managerSetupText").innerHTML=exists?`<strong>Managers_Ressources</strong> est disponible.`:`<strong>Managers_Ressources</strong> n’existe pas encore.`;
+  const exists=await managerTableExists();
+  $("managerAdminArea")?.classList.toggle("hidden",!exists);
+  $("initManagersBtn").textContent=exists?"Vérifier la table":"Initialiser la table";
   if(!exists)return;
-  const opts=S.resources.filter(r=>F(r,"Actif","actif")!==false).map(r=>`<option value="${r.id}">${esc(resourceLabel(r))}</option>`).join("");
+  const raw=await grist.docApi.fetchTable(T.managerResources), links=rowsFromFetch(raw);
+  const opts=(S.resources||[]).filter(r=>F(r,"Actif","actif")!==false).map(r=>`<option value="${r.id}">${esc(resLabel(r))}</option>`).join("");
   $("managerSelect").innerHTML='<option value="">— Manager —</option>'+opts;
   $("managedResourceSelect").innerHTML='<option value="">— Ressource —</option>'+opts;
-  $("managerRows").innerHTML=S.managerLinks.length?S.managerLinks.map(x=>{
+  $("managerRows").innerHTML=links.filter(x=>F(x,"Actif")!==false).map(x=>{
     const m=S.resources.find(r=>Number(r.id)===rid(F(x,"Manager"))), rr=S.resources.find(r=>Number(r.id)===rid(F(x,"Ressource")));
-    return `<tr><td>${esc(m?resourceLabel(m):"—")}</td><td>${esc(rr?resourceLabel(rr):"—")}</td><td>${F(x,"Actif")===false?"Non":"Oui"}</td><td><button class="table-action" data-unlink="${x.id}">Retirer</button></td></tr>`;
-  }).join(""):'<tr><td colspan="4">Aucune affectation.</td></tr>';
-  document.querySelectorAll("[data-unlink]").forEach(b=>b.onclick=()=>removeManagerLink(+b.dataset.unlink).catch(fatal));
+    return `<tr><td>${esc(m?resLabel(m):"—")}</td><td>${esc(rr?resLabel(rr):"—")}</td><td>Actif</td><td><button class="table-action" data-manager-off="${x.id}">Retirer</button></td></tr>`;
+  }).join("")||'<tr><td colspan="4">Aucune affectation.</td></tr>';
+  document.querySelectorAll("[data-manager-off]").forEach(b=>b.onclick=()=>disableManagerLink(+b.dataset.managerOff).catch(managerAdminError));
 }
 async function addManagerLink(){
   if(!S.isOwner)return;
   const m=+$("managerSelect").value,r=+$("managedResourceSelect").value;
-  if(!m||!r)return;
-  if(m===r)throw new Error("Le manager et la ressource doivent être différents.");
-  const duplicate=S.managerLinks.find(x=>rid(F(x,"Manager"))===m&&rid(F(x,"Ressource"))===r);
-  if(duplicate){
-    if(F(duplicate,"Actif")===false)await grist.getTable(T.managerResources).update({id:duplicate.id,fields:{Actif:true}});
-  }else await grist.getTable(T.managerResources).create({fields:{Manager:m,Ressource:r,Actif:true}});
-  await loadManagerLinks();await renderManagerAdmin();renderViewAs();
+  if(!m||!r)return managerAdminError(new Error("Sélectionnez un manager et une ressource."));
+  if(m===r)return managerAdminError(new Error("Le manager et la ressource doivent être différents."));
+  const raw=await grist.docApi.fetchTable(T.managerResources), links=rowsFromFetch(raw);
+  const old=links.find(x=>rid(F(x,"Manager"))===m&&rid(F(x,"Ressource"))===r);
+  if(old)await grist.getTable(T.managerResources).update({id:old.id,fields:{Actif:true}});
+  else await grist.getTable(T.managerResources).create({fields:{Manager:m,Ressource:r,Actif:true}});
+  await renderManagersAdmin();
 }
-async function removeManagerLink(id){
+async function disableManagerLink(id){
   if(!S.isOwner)return;
   await grist.getTable(T.managerResources).update({id,fields:{Actif:false}});
-  await loadManagerLinks();await renderManagerAdmin();renderViewAs();
+  await renderManagersAdmin();
 }
 
 function showView(name){
@@ -493,7 +446,7 @@ function render(){
   $("kv").textContent=S.myRequests.filter(r=>st(r)==="VALIDEE").length;
   $("kr").textContent=S.myRequests.filter(r=>st(r)==="REFUSEE").length;
   const makeRows=(items,actions=true)=>items.length?items.map(r=>{const e=st(r)==="EN_ATTENTE";return `<tr><td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actions&&e?`<div class="rowactions"><button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button></div>`:""}</td></tr>`}).join(""):'<tr><td colspan="6">Aucune demande.</td></tr>';
-  $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),!S.viewAs);
+  $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),true);
   $("rowsHome").innerHTML=makeRows(S.myRequests.slice().reverse().slice(0,5),false);
   if($("rowsAll")) $("rowsAll").innerHTML=makeRows((S.isAdmin||S.isOwner)?S.allRequests.filter(r=>!S.person||rid(F(r,"Demandeur"))!==Number(S.person.id)).slice().reverse():[],false);
   document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{edit(+b.dataset.e);showView("new")});
@@ -501,9 +454,8 @@ function render(){
   renderAdmin();
 }
 function reset(){S.editing=null;$("formTitle").textContent="Nouvelle demande";$("save").textContent="Envoyer";$("type").value="CONGE";$("motif").value="";$("start").value="";$("end").value="";$("comment").value="";$("cancelEdit").classList.add("hidden")}
-function edit(id){if(S.viewAs)return;const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE")return;S.editing=id;$("formTitle").textContent="Modifier ma demande";$("save").textContent="Enregistrer";$("type").value=F(r,"Type")||"CONGE";$("motif").value=rid(F(r,"Motif"));const iso=v=>new Date(Number(v)*1000).toISOString().slice(0,10);$("start").value=iso(F(r,"Date_Debut"));$("end").value=iso(F(r,"Date_Fin"));$("comment").value=F(r,"Commentaire_Demandeur")||"";$("cancelEdit").classList.remove("hidden")}
+function edit(id){const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE")return;S.editing=id;$("formTitle").textContent="Modifier ma demande";$("save").textContent="Enregistrer";$("type").value=F(r,"Type")||"CONGE";$("motif").value=rid(F(r,"Motif"));const iso=v=>new Date(Number(v)*1000).toISOString().slice(0,10);$("start").value=iso(F(r,"Date_Debut"));$("end").value=iso(F(r,"Date_Fin"));$("comment").value=F(r,"Commentaire_Demandeur")||"";$("cancelEdit").classList.remove("hidden")}
 async function save(){
-  if(S.viewAs)throw new Error("Mode Voir comme en lecture seule.");
   const a=$("start").value,b=$("end").value,m=+$("motif").value;
   if(!a||!b||!m)return msg("Motif et période obligatoires.");
   if(b<a)return msg("La date de fin doit être ≥ à la date de début.");
@@ -522,7 +474,7 @@ async function save(){
   }
   reset();await load();
 }
-async function cancelReq(id){if(S.viewAs)return;const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await syncRequestToCockpit(id);await load()}
+async function cancelReq(id){const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await syncRequestToCockpit(id);await load()}
 function msg(t){$("msg").textContent=t;$("msg").classList.remove("hidden")}
 function fatal(e){$("fatal").textContent=e?.message||String(e);$("fatal").classList.remove("hidden");$("app").classList.add("hidden")}
 async function boot(){
@@ -536,10 +488,8 @@ async function boot(){
   $("syncResourcesBtn").onclick=adminSyncResources;
   $("applyAcl").onclick=()=>{};
   $("initLabelsBtn").onclick=()=>initLabelsTable().catch(fatal);
-  $("initManagersBtn").onclick=()=>initManagerTable().catch(fatal);
-  $("addManagerLink").onclick=()=>addManagerLink().catch(fatal);
-  $("viewAsSelect").onchange=e=>setViewAs(e.target.value);
-  $("exitViewAs").onclick=()=>setViewAs("");
+  $("initManagersBtn").onclick=()=>initManagersTable();
+  $("addManagerLink").onclick=()=>addManagerLink().catch(managerAdminError);
   $("labelsSearch").oninput=e=>renderLabelsManager(e.target.value);
   $("resetAllLabels").onclick=()=>resetAllLabels().catch(fatal);
   $("save").onclick=()=>save().catch(fatal);
@@ -549,18 +499,7 @@ async function boot(){
   $("syncNow").onclick=async()=>{await syncAll("manual");await load()};
   await detectOwner();
   await syncAll("startup")
-  await identify();
-  await load();
-  try{await loadLabels()}catch(e){console.warn("Libellés optionnels indisponibles:",e)}
-  showView(S.isOwner&&!S.person?"acl":"home");
-  // Fonction optionnelle : seulement après démarrage complet du portail.
-  setTimeout(async()=>{
-    try{
-      await loadManagerLinks();
-      renderViewAs();
-      if(S.isOwner)await renderManagerAdmin();
-    }catch(e){console.warn("Module manager optionnel indisponible:",e)}
-  },0);
+  await identify();await load();await loadLabels();showView(S.isOwner&&!S.person?"acl":"home");
 }
 boot().catch(fatal);
 
