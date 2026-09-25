@@ -224,3 +224,18 @@
 /* V1.36 — administration Managers & Ressources */
 .manager-form{display:grid;grid-template-columns:1fr 1fr auto;gap:14px;align-items:end;margin:18px 0}
 @media(max-width:850px){.manager-form{grid-template-columns:1fr}}
+
+
+/* V1.37 — mode Manager "Voir comme" en lecture seule */
+.header-actions{display:flex;align-items:center;gap:12px}
+.view-as-bar{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:7px 9px;box-shadow:var(--shadow)}
+.view-as-bar span{font-size:11px;font-weight:800;color:#536079;white-space:nowrap}
+.view-as-bar select{min-width:190px;padding:7px 9px;background:#fbfcfe}
+.view-as-bar small{font-size:10px;font-weight:800;color:#137f7b;white-space:nowrap}
+body.view-as-mode [data-view="new"],body.view-as-mode [data-go="new"],body.view-as-mode #newBtn{display:none!important}
+@media(max-width:850px){
+  header{gap:12px;flex-direction:column}
+  .header-actions{width:100%;justify-content:space-between}
+  .view-as-bar{flex:1;flex-wrap:wrap}
+  .view-as-bar select{min-width:140px;flex:1}
+}

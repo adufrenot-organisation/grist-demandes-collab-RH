@@ -1,6 +1,6 @@
-const VERSION="V1.36";
+const VERSION="V1.37";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 function syncConfig(){
   // Configuration utilisateur/session uniquement. Ne jamais embarquer une clé maître dans le code.
@@ -282,16 +282,9 @@ function rowsFromFetch(raw){
   const ids=raw?.id||[];
   return ids.map((id,i)=>{const r={id};Object.keys(raw||{}).forEach(k=>{if(k!=="id"&&Array.isArray(raw[k]))r[k]=raw[k][i]});return r});
 }
-async function initManagersTable(){
+async function refreshManagersAdmin(){
   if(!S.isOwner)return;
-  try{
-    if(!await managerTableExists()){
-      await grist.docApi.applyUserActions([["AddTable",T.managerResources,[
-        {id:"Manager",type:"Ref:Ressources"},{id:"Ressource",type:"Ref:Ressources"},{id:"Actif",type:"Bool"}
-      ]]]);
-    }
-    await renderManagersAdmin();
-  }catch(e){managerAdminError(e)}
+  try{await renderManagersAdmin()}catch(e){managerAdminError(e)}
 }
 function managerAdminError(e){
   const el=$("managerAdminMsg");if(!el)return;
@@ -302,7 +295,7 @@ async function renderManagersAdmin(){
   if(!S.isOwner)return;
   const exists=await managerTableExists();
   $("managerAdminArea")?.classList.toggle("hidden",!exists);
-  $("initManagersBtn").textContent=exists?"Vérifier la table":"Initialiser la table";
+  if($("managerTableState")) $("managerTableState").textContent=exists?"Table Managers_Ressources détectée.":"Table Managers_Ressources introuvable.";
   if(!exists)return;
   const raw=await grist.docApi.fetchTable(T.managerResources), links=rowsFromFetch(raw);
   const opts=(S.resources||[]).filter(r=>F(r,"Actif","actif")!==false).map(r=>`<option value="${r.id}">${esc(resLabel(r))}</option>`).join("");
@@ -331,7 +324,54 @@ async function disableManagerLink(id){
   await renderManagersAdmin();
 }
 
+function managerTargetLabel(id){
+  const r=(S.resources||[]).find(x=>Number(x.id)===Number(id));
+  return r?resLabel(r):`Ressource #${id}`;
+}
+function applyViewAs(){
+  const target=S.viewAs;
+  const targetId=target?Number(target.id):Number(S.person?.id||0);
+  S.myRequests=targetId?S.allRequests.filter(r=>rid(F(r,"Demandeur"))===targetId):[];
+  S.requests=S.viewAs?S.myRequests:(S.isAdmin?S.allRequests:S.myRequests);
+  document.body.classList.toggle("view-as-mode",!!S.viewAs);
+  const bar=$("viewAsBar"), sel=$("viewAsSelect");
+  if(bar)bar.classList.toggle("hidden",!S.managedResources.length);
+  if(sel && S.managedResources.length){
+    const current=S.viewAs?String(S.viewAs.id):"";
+    sel.innerHTML='<option value="">Moi-même</option>'+S.managedResources.map(x=>`<option value="${x.id}">${esc(managerTargetLabel(x.id))}</option>`).join("");
+    sel.value=current;
+  }
+}
+async function loadManagerContext(){
+  // Appelé uniquement APRES le boot normal : une erreur ici ne bloque jamais l'identification.
+  if(!S.person||S.isOwner)return;
+  try{
+    const raw=await grist.docApi.fetchTable(T.managerResources), links=rowsFromFetch(raw);
+    S.managerLinks=links.filter(x=>F(x,"Actif")!==false && rid(F(x,"Manager"))===Number(S.person.id));
+    S.managedResources=S.managerLinks.map(x=>({id:rid(F(x,"Ressource"))})).filter(x=>x.id);
+    applyViewAs(); render();
+  }catch(e){
+    console.warn("Mode manager indisponible:",e);
+    S.managerLinks=[];S.managedResources=[];S.viewAs=null;
+  }
+}
+function setViewAs(id){
+  const n=Number(id||0);
+  if(!n){
+    S.viewAs=null;
+  }else{
+    const allowed=S.managedResources.find(x=>Number(x.id)===n);
+    if(!allowed)return;
+    S.viewAs={id:n};
+  }
+  reset();
+  applyViewAs();
+  render();
+  showView("home");
+}
+
 function showView(name){
+  if(S.viewAs && name==="new")return;
   if(["resources","managers","motifs","acl","sync"].includes(name)&&!S.isOwner)return;
   if(name==="labels"&&!(S.isAdmin||S.isOwner))return;
   if(name==="all"&&!(S.isAdmin||S.isOwner))return;
@@ -439,14 +479,16 @@ function auditAcl(){
 }
 
 function render(){
-  $("identity").textContent=`${S.user.name||S.user.email}${S.user.email?` · ${S.user.email}`:""}`;
+  const realIdentity=`${S.user.name||S.user.email}${S.user.email?` · ${S.user.email}`:""}`;
+  $("identity").textContent=S.viewAs?`${realIdentity} · Vue lecture seule : ${managerTargetLabel(S.viewAs.id)}`:realIdentity;
+  applyViewAs();
   $("setup").classList.add("hidden");$("app").classList.remove("hidden");$("fatal").classList.add("hidden");
   $("motif").innerHTML='<option value="">— Choisir —</option>'+S.motifs.filter(r=>F(r,"Actif","actif")!==false).map(r=>`<option value="${r.id}">${esc(motifName(r.id))}</option>`).join("");
   $("kw").textContent=S.myRequests.filter(r=>st(r)==="EN_ATTENTE").length;
   $("kv").textContent=S.myRequests.filter(r=>st(r)==="VALIDEE").length;
   $("kr").textContent=S.myRequests.filter(r=>st(r)==="REFUSEE").length;
   const makeRows=(items,actions=true)=>items.length?items.map(r=>{const e=st(r)==="EN_ATTENTE";return `<tr><td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actions&&e?`<div class="rowactions"><button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button></div>`:""}</td></tr>`}).join(""):'<tr><td colspan="6">Aucune demande.</td></tr>';
-  $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),true);
+  $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),!S.viewAs);
   $("rowsHome").innerHTML=makeRows(S.myRequests.slice().reverse().slice(0,5),false);
   if($("rowsAll")) $("rowsAll").innerHTML=makeRows((S.isAdmin||S.isOwner)?S.allRequests.filter(r=>!S.person||rid(F(r,"Demandeur"))!==Number(S.person.id)).slice().reverse():[],false);
   document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{edit(+b.dataset.e);showView("new")});
@@ -488,18 +530,20 @@ async function boot(){
   $("syncResourcesBtn").onclick=adminSyncResources;
   $("applyAcl").onclick=()=>{};
   $("initLabelsBtn").onclick=()=>initLabelsTable().catch(fatal);
-  $("initManagersBtn").onclick=()=>initManagersTable();
+  $("refreshManagersBtn").onclick=()=>refreshManagersAdmin();
   $("addManagerLink").onclick=()=>addManagerLink().catch(managerAdminError);
   $("labelsSearch").oninput=e=>renderLabelsManager(e.target.value);
   $("resetAllLabels").onclick=()=>resetAllLabels().catch(fatal);
   $("save").onclick=()=>save().catch(fatal);
   $("newBtn").onclick=()=>{reset();showView("new")};
   $("cancelEdit").onclick=()=>{reset();showView("mine")};
-  $("refresh").onclick=async()=>{await syncAll("manual");await load()};
-  $("syncNow").onclick=async()=>{await syncAll("manual");await load()};
+  $("refresh").onclick=async()=>{await syncAll("manual");await load();await loadManagerContext()};
+  $("syncNow").onclick=async()=>{await syncAll("manual");await load();await loadManagerContext()};
+  $("viewAsSelect").onchange=e=>setViewAs(e.target.value);
   await detectOwner();
   await syncAll("startup")
   await identify();await load();await loadLabels();showView(S.isOwner&&!S.person?"acl":"home");
+  setTimeout(()=>loadManagerContext().catch(e=>console.warn("Mode manager:",e)),0);
 }
 boot().catch(fatal);
 

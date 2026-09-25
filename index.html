@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.36</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.37</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.36</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.37</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -30,7 +30,7 @@
 <div class="foot"></div>
 </aside>
 <main class="content">
-<header><div><div class="eyebrow">ESPACE RH</div><h1 id="pageTitle" data-label-key="page.home">Bonjour</h1><p id="identity">Identification…</p></div><button id="refresh" class="iconbtn" title="Actualiser">↻</button></header>
+<header><div><div class="eyebrow">ESPACE RH</div><h1 id="pageTitle" data-label-key="page.home">Bonjour</h1><p id="identity">Identification…</p></div><div class="header-actions"><div id="viewAsBar" class="view-as-bar hidden"><span>Voir comme</span><select id="viewAsSelect"><option value="">Moi-même</option></select><small>Lecture seule</small></div><button id="refresh" class="iconbtn" title="Actualiser">↻</button></div></header>
 <div id="fatal" class="alert danger hidden"></div>
 <section id="setup" class="card hidden"><h2>Initialisation</h2></section>
 <div id="app" class="hidden">
@@ -65,7 +65,7 @@
 <section id="view-managers" class="view adminview">
  <div class="pagehead"><div><span class="pill adminpill">AFFECTATIONS LOCALES</span><h2>Managers & Ressources</h2><p>Préparez les affectations permettant ensuite le mode « Voir comme ».</p></div></div>
  <div class="card">
-  <div class="section-head"><div><h3>Configuration</h3><p>La table locale <strong>Managers_Ressources</strong> est indépendante du Cockpit.</p></div><button id="initManagersBtn" class="primary">Initialiser la table</button></div>
+  <div class="section-head"><div><h3>Configuration</h3><p>La table locale <strong>Managers_Ressources</strong> est indépendante du Cockpit.</p><small id="managerTableState">Table créée manuellement dans Grist.</small></div><button id="refreshManagersBtn" class="secondary">↻ Actualiser</button></div>
   <div id="managerAdminMsg" class="alert hidden"></div>
   <div id="managerAdminArea" class="hidden">
    <div class="manager-form"><label>Manager<select id="managerSelect"></select></label><label>Ressource<select id="managedResourceSelect"></select></label><button id="addManagerLink" class="primary">＋ Affecter</button></div>
