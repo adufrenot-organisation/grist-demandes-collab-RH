@@ -215,3 +215,8 @@
   .labels-setup-card .section-head{align-items:stretch;flex-direction:column;gap:14px}
   .labels-setup-card #initLabelsBtn{width:100%}
 }
+
+/* V1.31 — catalogue étendu des libellés */
+.labels-count{font-size:12px;font-weight:800;color:#637b9a;white-space:nowrap}
+.labels-toolbar{flex-wrap:wrap}
+.labels-toolbar input{min-width:260px}

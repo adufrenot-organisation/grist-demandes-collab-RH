@@ -1,4 +1,4 @@
-const VERSION="V1.30";
+const VERSION="V1.31";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -131,24 +131,36 @@ const LABEL_DEFS=[
  ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.all","Pages","Autres demandes"],
  ["page.resources","Pages","Ressources"],["page.motifs","Pages","Motifs RH"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
  ["home.pill","Accueil","Portail collaborateur"],["home.hero","Accueil","Gérez vos demandes simplement."],
+ ["mine.pill","Mes demandes","SUIVI"],["mine.title","Mes demandes","Mes demandes"],["mine.subtitle","Mes demandes","Historique et état de traitement."],
+ ["all.pill","Autres demandes","ADMIN"],["all.title","Autres demandes","Autres demandes"],
  ["action.new","Actions","Nouvelle demande"],["action.save","Actions","Enregistrer"],["action.cancel","Actions","Annuler"],["action.edit","Actions","Modifier"],["action.refresh","Actions","Actualiser"],
+ ["action.audit","Actions","Auditer"],["action.reset","Actions","Réinitialiser tout"],["action.default","Actions","Défaut"],
+ ["table.reference","Tableaux","RÉFÉRENCE"],["table.type","Tableaux","TYPE"],["table.period","Tableaux","PÉRIODE"],["table.motif","Tableaux","MOTIF"],["table.status","Tableaux","STATUT"],["table.actions","Tableaux","ACTIONS"],
+ ["table.name","Tableaux","NOM"],["table.email","Tableaux","EMAIL"],["table.team","Tableaux","ÉQUIPE"],["table.profile","Tableaux","PROFIL"],["table.state","Tableaux","ÉTAT"],
  ["field.type","Formulaire","Type"],["field.start","Formulaire","Date de début"],["field.end","Formulaire","Date de fin"],["field.motif","Formulaire","Motif"],["field.comment","Formulaire","Commentaire"],
+ ["field.code","Formulaire","Code"],["field.label","Formulaire","Libellé"],["field.description","Formulaire","Description"],
  ["status.pending","Statuts","En attente"],["status.approved","Statuts","Validée"],["status.refused","Statuts","Refusée"],["status.cancelled","Statuts","Annulée"],
- ["empty.requests","Messages","Aucune demande."],["empty.resources","Messages","Aucune ressource synchronisée."],["empty.motifs","Messages","Aucun motif local."]
+ ["empty.requests","Messages","Aucune demande."],["empty.resources","Messages","Aucune ressource synchronisée."],["empty.motifs","Messages","Aucun motif local."],
+ ["sync.title","Synchronisation","Synchronisation"],["sync.notrun","Synchronisation","Pas encore exécutée"],
+ ["labels.title","Libellés","Libellés de l’application"],["labels.subtitle","Libellés","Modifiez les textes affichés sans changer les clés techniques ni le fonctionnement."],
+ ["labels.table","Libellés","Table des libellés"],["labels.init","Libellés","Initialiser la table"],["labels.complete","Libellés","Compléter / vérifier la table"],
+ ["acl.pill","ACL","SECURITY CENTER"],["acl.title","ACL","ACL & Permissions"],["acl.audit","ACL","Audit des permissions"],
+ ["motifs.pill","Motifs","RÉFÉRENTIEL LOCAL"],["motifs.new","Motifs","Nouveau motif"],["motifs.active","Motifs","Motif actif"],
+ ["resources.title","Ressources","Ressources"]
 ];
 const LABEL_BY_DEFAULT=Object.fromEntries(LABEL_DEFS.map(([k,c,d])=>[d,k]));
 function labelMap(){return Object.fromEntries((S.labels||[]).map(r=>[norm(F(r,"Cle")),norm(F(r,"Libelle"))]).filter(([k,v])=>k&&v))}
 function L(key,fallback=""){return labelMap()[key]||fallback||LABEL_DEFS.find(x=>x[0]===key)?.[2]||key}
 function applyLabels(root=document){
   const map=labelMap();
-  const replacements=new Map(LABEL_DEFS.map(([k,c,d])=>[d,map[k]||d]));
+  const replacements=new Map(LABEL_DEFS.map(([k,c,d])=>[d.toLocaleLowerCase("fr"),map[k]||d]));
   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
   const nodes=[]; while(walker.nextNode())nodes.push(walker.currentNode);
   nodes.forEach(n=>{
-    const raw=n.nodeValue, trimmed=raw.trim();
-    if(replacements.has(trimmed)){
+    const raw=n.nodeValue, trimmed=raw.trim(), key=trimmed.toLocaleLowerCase("fr");
+    if(replacements.has(key)){
       const lead=raw.match(/^\s*/)?.[0]||"", tail=raw.match(/\s*$/)?.[0]||"";
-      n.nodeValue=lead+replacements.get(trimmed)+tail;
+      n.nodeValue=lead+replacements.get(key)+tail;
     }
   });
   root.querySelectorAll?.("[placeholder],[title]").forEach(el=>{
@@ -160,6 +172,15 @@ function applyLabels(root=document){
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
+  const heads=[...document.querySelectorAll(".nav-title[data-accordion]")];
+  heads.forEach(el=>{
+    const chevron=el.querySelector(".acc-chevron");
+    const key=el.dataset.accordion==="space"?"section.space":"section.admin";
+    const base=el.dataset.accordion==="space"?"MON ESPACE":"ADMINISTRATION";
+    [...el.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE).forEach(n=>n.nodeValue="");
+    el.insertBefore(document.createTextNode(L(key,base)+" "),chevron||null);
+  });
+
 }
 async function labelsTableExists(){
   try{await grist.docApi.fetchTable(T.labels);return true}catch{return false}
@@ -177,7 +198,10 @@ async function loadLabels(){
   const initBtn=$("initLabelsBtn");
   if(initBtn) initBtn.textContent=exists?"Compléter / vérifier la table":"Initialiser la table";
   $("labelsManager")?.classList.toggle("hidden",!exists);
-  if(exists){renderLabelsManager();applyLabels()}
+  if(exists){
+    const count=$("labelsCount"); if(count)count.textContent=`${LABEL_DEFS.length} libellés disponibles`;
+    renderLabelsManager();applyLabels();
+  }
 }
 async function initLabelsTable(){
   if(!(S.isAdmin||S.isOwner))return;

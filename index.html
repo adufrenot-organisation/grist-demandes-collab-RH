@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.30</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.31</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.30</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.31</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -78,7 +78,7 @@
    <div class="setup-hint">Cette action crée la table si elle n’existe pas et ajoute les clés de libellés manquantes sans supprimer les personnalisations existantes.</div>
  </div>
  <div id="labelsManager" class="card hidden">
-   <div class="labels-toolbar"><input id="labelsSearch" type="search" placeholder="Rechercher un libellé…"><button id="resetAllLabels" class="secondary">Réinitialiser tout</button></div>
+   <div class="labels-toolbar"><span id="labelsCount" class="labels-count"></span><input id="labelsSearch" type="search" placeholder="Rechercher un libellé…"><button id="resetAllLabels" class="secondary">Réinitialiser tout</button></div>
    <div id="labelsMsg" class="alert hidden"></div>
    <div class="tablewrap"><table class="labels-table"><thead><tr><th>Rubrique</th><th>Clé</th><th>Libellé par défaut</th><th>Libellé affiché</th><th></th></tr></thead><tbody id="labelsRows"></tbody></table></div>
  </div>
