@@ -193,3 +193,15 @@
 .sidebar[data-open-section="space"] #allRequestsNav:not(.hidden){
   display:flex!important;
 }
+
+/* V1.29 — administration des libellés */
+.labels-toolbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+.labels-toolbar input{flex:1;max-width:520px}
+.labels-table .label-input{min-width:240px;width:100%}
+.label-actions{display:flex;gap:6px;white-space:nowrap}
+.labels-table td{vertical-align:middle}
+@media(max-width:900px){
+  .labels-toolbar{align-items:stretch;flex-direction:column}
+  .labels-toolbar input{max-width:none}
+  .labels-table .label-input{min-width:180px}
+}

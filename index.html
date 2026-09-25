@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.28</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.29</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.28</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.29</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -15,9 +15,10 @@
   <button id="allRequestsNav" class="accordion-item accordion-space nav hidden" data-view="all">▦ <span>Autres demandes</span></button>
   <div id="adminNav" class="hidden">
     <div class="nav-title admin-title" data-accordion="admin">ADMINISTRATION <span class="acc-chevron">⌄</span></div>
-    <button class="accordion-item accordion-admin nav" data-view="resources">♙ <span>Ressources</span></button>
-    <button class="accordion-item accordion-admin nav" data-view="motifs">◇ <span>Motifs RH</span></button>
-    <button class="accordion-item accordion-admin nav" data-view="acl">◈ <span>ACL & Permissions</span></button>
+    <button class="accordion-item accordion-admin nav owner-only" data-view="resources">♙ <span>Ressources</span></button>
+    <button class="accordion-item accordion-admin nav owner-only" data-view="motifs">◇ <span>Motifs RH</span></button>
+    <button class="accordion-item accordion-admin nav owner-only" data-view="acl">◈ <span>ACL & Permissions</span></button>
+    <button class="accordion-item accordion-admin nav" data-view="labels">✎ <span>Libellés de l’application</span></button>
     
   </div>
   <div class="syncmini" id="syncMini">
@@ -66,6 +67,19 @@
 <div class="formgrid"><label>Code<input id="motifCodeAdmin" maxlength="40" placeholder="Ex. CP"></label><label>Libellé<input id="motifLabelAdmin" maxlength="120" placeholder="Ex. Congés payés"></label><label class="wide">Description<textarea id="motifDescAdmin" rows="4"></textarea></label><label class="toggleline wide"><input id="motifActiveAdmin" type="checkbox" checked> Motif actif</label></div>
 <div id="motifAdminMsg" class="alert hidden"></div><div class="actions"><button id="cancelMotif" class="secondary">Annuler</button><button id="saveMotif" class="primary">Enregistrer</button></div></div></div>
 </section>
+
+<section id="view-labels" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">PERSONNALISATION</span><h2>Libellés de l’application</h2><p>Modifiez les textes affichés sans changer les clés techniques ni le fonctionnement.</p></div></div>
+ <div id="labelsSetup" class="card hidden">
+   <div class="section-head"><div><h3>Initialiser les libellés</h3><p>La table locale <strong>PARAM_LIBELLES</strong> n’existe pas encore.</p></div><button id="initLabelsBtn" class="primary">Initialiser</button></div>
+ </div>
+ <div id="labelsManager" class="card hidden">
+   <div class="labels-toolbar"><input id="labelsSearch" type="search" placeholder="Rechercher un libellé…"><button id="resetAllLabels" class="secondary">Réinitialiser tout</button></div>
+   <div id="labelsMsg" class="alert hidden"></div>
+   <div class="tablewrap"><table class="labels-table"><thead><tr><th>Rubrique</th><th>Clé</th><th>Libellé par défaut</th><th>Libellé affiché</th><th></th></tr></thead><tbody id="labelsRows"></tbody></table></div>
+ </div>
+</section>
+
 <section id="view-acl" class="view adminview">
  <div class="pagehead"><div><span class="pill adminpill">SECURITY CENTER</span><h2>ACL & Permissions</h2><p>Auditez les protections attendues avant toute correction.</p></div></div>
  <div class="security-grid"><div class="score card"><small>ÉTAT GLOBAL</small><div class="score-ring" id="aclScore">—</div><strong id="aclState">Audit requis</strong><p>Aucune modification automatique.</p></div>

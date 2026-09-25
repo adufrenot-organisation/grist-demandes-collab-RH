@@ -1,6 +1,6 @@
-const VERSION="V1.28";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:""};
+const VERSION="V1.29";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES"};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 function syncConfig(){
   // Configuration utilisateur/session uniquement. Ne jamais embarquer une clé maître dans le code.
@@ -108,6 +108,8 @@ async function load(){
   const [q,m,res]=await Promise.all([table(T.requests),table(T.motifs),table(T.resources)]);
   S.motifs=m; S.resources=res;
   S.isAdmin=norm(F(S.person,"Profil","profil")).toUpperCase()==="ADMIN";
+  $("adminNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
+  document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!S.isOwner));
   S.allRequests=q;
   S.myRequests=S.person?q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id)):[];
   // Sécurité : q ne contient que ce que les ACL Grist autorisent réellement.
@@ -115,18 +117,124 @@ async function load(){
   S.requests=S.isAdmin?q:S.myRequests;
   $("allRequestsNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
   render();
+  applyLabels();
 }
 function motifName(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Libelle","Nom","Code")||`Motif ${id}`):"—"}
 function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Code")):""}
+
+// V1.29 — libellés administrables localement dans Grist
+const LABEL_DEFS=[
+ ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.all","Menu","Autres demandes"],
+ ["nav.resources","Menu","Ressources"],["nav.motifs","Menu","Motifs RH"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
+ ["section.space","Menu","MON ESPACE"],["section.admin","Menu","ADMINISTRATION"],
+ ["brand.title","En-tête","Demandes RH"],["brand.subtitle","En-tête","Portail collaborateur"],["header.eyebrow","En-tête","ESPACE RH"],
+ ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.all","Pages","Autres demandes"],
+ ["page.resources","Pages","Ressources"],["page.motifs","Pages","Motifs RH"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
+ ["home.pill","Accueil","Portail collaborateur"],["home.hero","Accueil","Gérez vos demandes simplement."],
+ ["action.new","Actions","Nouvelle demande"],["action.save","Actions","Enregistrer"],["action.cancel","Actions","Annuler"],["action.edit","Actions","Modifier"],["action.refresh","Actions","Actualiser"],
+ ["field.type","Formulaire","Type"],["field.start","Formulaire","Date de début"],["field.end","Formulaire","Date de fin"],["field.motif","Formulaire","Motif"],["field.comment","Formulaire","Commentaire"],
+ ["status.pending","Statuts","En attente"],["status.approved","Statuts","Validée"],["status.refused","Statuts","Refusée"],["status.cancelled","Statuts","Annulée"],
+ ["empty.requests","Messages","Aucune demande."],["empty.resources","Messages","Aucune ressource synchronisée."],["empty.motifs","Messages","Aucun motif local."]
+];
+const LABEL_BY_DEFAULT=Object.fromEntries(LABEL_DEFS.map(([k,c,d])=>[d,k]));
+function labelMap(){return Object.fromEntries((S.labels||[]).map(r=>[norm(F(r,"Cle")),norm(F(r,"Libelle"))]).filter(([k,v])=>k&&v))}
+function L(key,fallback=""){return labelMap()[key]||fallback||LABEL_DEFS.find(x=>x[0]===key)?.[2]||key}
+function applyLabels(root=document){
+  const map=labelMap();
+  const replacements=new Map(LABEL_DEFS.map(([k,c,d])=>[d,map[k]||d]));
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+  const nodes=[]; while(walker.nextNode())nodes.push(walker.currentNode);
+  nodes.forEach(n=>{
+    const raw=n.nodeValue, trimmed=raw.trim();
+    if(replacements.has(trimmed)){
+      const lead=raw.match(/^\s*/)?.[0]||"", tail=raw.match(/\s*$/)?.[0]||"";
+      n.nodeValue=lead+replacements.get(trimmed)+tail;
+    }
+  });
+  root.querySelectorAll?.("[placeholder],[title]").forEach(el=>{
+    ["placeholder","title"].forEach(a=>{
+      const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
+    });
+  });
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",all:"nav.all",resources:"nav.resources",motifs:"nav.motifs",acl:"nav.acl",labels:"nav.labels"};
+  Object.entries(navKeys).forEach(([view,key])=>{
+    const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
+  });
+}
+async function labelsTableExists(){
+  try{await grist.docApi.fetchTable(T.labels);return true}catch{return false}
+}
+async function loadLabels(){
+  if(!(S.isAdmin||S.isOwner))return;
+  const exists=await labelsTableExists();
+  S.labelsReady=exists;
+  S.labels=exists?await table(T.labels):[];
+  $("labelsSetup")?.classList.toggle("hidden",exists);
+  $("labelsManager")?.classList.toggle("hidden",!exists);
+  if(exists){renderLabelsManager();applyLabels()}
+}
+async function initLabelsTable(){
+  if(!(S.isAdmin||S.isOwner))return;
+  if(!await labelsTableExists()){
+    await grist.docApi.applyUserActions([["AddTable",T.labels,[
+      {id:"Cle",type:"Text"},{id:"Categorie",type:"Text"},{id:"Libelle",type:"Text"}
+    ]]]);
+  }
+  const existing=await table(T.labels), keys=new Set(existing.map(r=>norm(F(r,"Cle"))));
+  const actions=LABEL_DEFS.filter(([k])=>!keys.has(k)).map(([k,c,d])=>["AddRecord",T.labels,null,{Cle:k,Categorie:c,Libelle:d}]);
+  if(actions.length)await grist.docApi.applyUserActions(actions);
+  await loadLabels();
+}
+function renderLabelsManager(filter=""){
+  if(!S.labelsReady)return;
+  const byKey=Object.fromEntries(S.labels.map(r=>[norm(F(r,"Cle")),r]));
+  const q=norm(filter).toLowerCase();
+  $("labelsRows").innerHTML=LABEL_DEFS.filter(([k,c,d])=>!q||`${k} ${c} ${d} ${L(k,d)}`.toLowerCase().includes(q)).map(([k,c,d])=>{
+    const r=byKey[k], current=r?norm(F(r,"Libelle")):d;
+    return `<tr><td>${esc(c)}</td><td><span class="codechip">${esc(k)}</span></td><td>${esc(d)}</td><td><input class="label-input" data-label-key="${esc(k)}" value="${esc(current)}"></td><td><div class="label-actions"><button class="table-action" data-label-save="${esc(k)}">Enregistrer</button><button class="table-action" data-label-reset="${esc(k)}">Défaut</button></div></td></tr>`;
+  }).join("");
+  document.querySelectorAll("[data-label-save]").forEach(b=>b.onclick=()=>saveLabel(b.dataset.labelSave).catch(fatal));
+  document.querySelectorAll("[data-label-reset]").forEach(b=>b.onclick=()=>resetLabel(b.dataset.labelReset).catch(fatal));
+}
+async function saveLabel(key){
+  if(!(S.isAdmin||S.isOwner))return;
+  const input=document.querySelector(`[data-label-key="${CSS.escape(key)}"]`), value=norm(input?.value);
+  if(!value)throw new Error("Le libellé ne peut pas être vide.");
+  const r=S.labels.find(x=>norm(F(x,"Cle"))===key);
+  if(r)await grist.docApi.applyUserActions([["UpdateRecord",T.labels,r.id,{Libelle:value}]]);
+  else {
+    const def=LABEL_DEFS.find(x=>x[0]===key);
+    await grist.docApi.applyUserActions([["AddRecord",T.labels,null,{Cle:key,Categorie:def?.[1]||"",Libelle:value}]]);
+  }
+  await loadLabels(); showLabelMsg("Libellé enregistré.","success");
+}
+async function resetLabel(key){
+  const def=LABEL_DEFS.find(x=>x[0]===key); if(!def)return;
+  const r=S.labels.find(x=>norm(F(x,"Cle"))===key);
+  if(r)await grist.docApi.applyUserActions([["UpdateRecord",T.labels,r.id,{Libelle:def[2]}]]);
+  await loadLabels(); showLabelMsg("Libellé réinitialisé.","success");
+}
+async function resetAllLabels(){
+  if(!(S.isAdmin||S.isOwner)||!S.labelsReady)return;
+  const byKey=Object.fromEntries(S.labels.map(r=>[norm(F(r,"Cle")),r]));
+  const actions=LABEL_DEFS.flatMap(([k,c,d])=>byKey[k]?[["UpdateRecord",T.labels,byKey[k].id,{Libelle:d}]]:[["AddRecord",T.labels,null,{Cle:k,Categorie:c,Libelle:d}]]);
+  if(actions.length)await grist.docApi.applyUserActions(actions);
+  await loadLabels(); showLabelMsg("Tous les libellés ont été réinitialisés.","success");
+}
+function showLabelMsg(text,type=""){
+  const el=$("labelsMsg"); if(!el)return; el.textContent=text; el.className=`alert ${type}`; setTimeout(()=>el.classList.add("hidden"),2500);
+}
+
 function showView(name){
   if(["resources","motifs","acl","sync"].includes(name)&&!S.isOwner)return;
+  if(name==="labels"&&!(S.isAdmin||S.isOwner))return;
   if(name==="all"&&!(S.isAdmin||S.isOwner))return;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:"Bonjour",new:"Nouvelle demande",mine:"Mes demandes",all:"Autres demandes",resources:"Ressources",motifs:"Motifs RH",acl:"ACL & Permissions",sync:"Synchronisation"};
-  $("pageTitle").textContent=titles[name]||"Demandes RH";
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],labels:["page.labels","Libellés de l’application"]};
+  const t=titles[name]; $("pageTitle").textContent=t?L(t[0],t[1]):L("brand.title","Demandes RH");
 }
 async function detectOwner(){
   // Bootstrap V1.7 : l'espace Admin ne dépend plus des ACL Ressources.
@@ -268,6 +376,9 @@ async function boot(){
   $("saveMotif").onclick=()=>saveAdminMotif().catch(fatal);
   $("syncResourcesBtn").onclick=adminSyncResources;
   $("applyAcl").onclick=()=>{};
+  $("initLabelsBtn").onclick=()=>initLabelsTable().catch(fatal);
+  $("labelsSearch").oninput=e=>renderLabelsManager(e.target.value);
+  $("resetAllLabels").onclick=()=>resetAllLabels().catch(fatal);
   $("save").onclick=()=>save().catch(fatal);
   $("newBtn").onclick=()=>{reset();showView("new")};
   $("cancelEdit").onclick=()=>{reset();showView("mine")};
@@ -275,7 +386,7 @@ async function boot(){
   $("syncNow").onclick=async()=>{await syncAll("manual");await load()};
   await detectOwner();
   await syncAll("startup")
-  await identify();await load();showView(S.isOwner&&!S.person?"acl":"home");
+  await identify();await load();await loadLabels();showView(S.isOwner&&!S.person?"acl":"home");
 }
 boot().catch(fatal);
 
@@ -312,7 +423,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","all"],
-    admin: ["resources","motifs","acl","sync"]
+    admin: ["resources","motifs","acl","labels","sync"]
   };
 
   const applyAccordion = (open) => {
