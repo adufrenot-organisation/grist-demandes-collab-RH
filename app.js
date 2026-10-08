@@ -94,10 +94,15 @@ async function table(name){return rows(await grist.docApi.fetchTable(name))}
 async function identify(){
   const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
 
-  // Owner : le bootstrap ADMIN_PORTAIL reste prioritaire et ne dépend pas
-  // du nombre de ressources rendues visibles par les ACL.
+  // Owner : le bootstrap ADMIN_PORTAIL reste prioritaire, mais on tente aussi
+  // de rattacher l'Owner à sa ligne Ressources via l'adresse e-mail.
+  // Les ids Grist étant propres à chaque document, l'e-mail est la clé
+  // fonctionnelle de rapprochement entre les documents.
   if(S.isOwner && rr.length!==1){
-    S.person=null;
+    const ownerEmail=email(S.ownerBootstrap?.email);
+    S.person=ownerEmail
+      ? (rr.find(r=>email(F(r,"Email","email"))===ownerEmail)||null)
+      : null;
     S.user={email:S.ownerBootstrap?.email||"",name:S.ownerBootstrap?.name||"Owner"};
     return;
   }
@@ -575,6 +580,9 @@ async function save(){
     await tab.update({id:S.editing,fields});
     await syncRequestToCockpit(S.editing);
   } else {
+    if(!S.person){
+      throw new Error(`Aucune ressource associée à ${S.user?.email||"l'utilisateur connecté"}. Vérifiez que l'adresse e-mail existe dans Ressources.`);
+    }
     const u=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`;
     Object.assign(fields,{Reference:`DRH-${new Date().getFullYear()}-${u.slice(0,8).toUpperCase()}`,Demandeur:S.person.id,Statut:"EN_ATTENTE",Date_Demande:Math.floor(Date.now()/1000),UUID_Demande:u,Version_Sync:1});
     const created=await tab.create({fields});
