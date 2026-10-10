@@ -1,4 +1,4 @@
-const VERSION="V1.47";
+const VERSION="V1.48";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -91,39 +91,86 @@ const ep=d=>Math.floor(new Date(d+"T00:00:00").getTime()/1000), st=r=>norm(F(r,"
 const dt=v=>v?new Date(Number(v)*1000).toLocaleDateString("fr-FR"):"—";
 function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(const k of Object.keys(t))if(k!=="id")r[k]=t[k]?.[i];return r})}
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
-async function inferVisiblePerson(rr=null){
-  const visible=(rr||(await table(T.resources))).filter(r=>F(r,"Actif","actif")!==false);
-  if(visible.length===1)return visible[0];
-  if(visible.length===0)return null;
-
-  // Un manager peut voir sa propre ligne ET celles de ses ressources.
-  // Dans ce cas on retrouve son identité grâce à Managers_Ressources.
-  let links=[];
+async function currentGristIdentity(){
+  // V1.48 — tente d'obtenir l'identité réelle de la session Grist.
+  // On ne déduit jamais l'identité du nombre de ressources visibles si l'email
+  // de session est disponible.
+  const pickEmail=(obj)=>{
+    if(!obj||typeof obj!=="object")return "";
+    const direct=[obj.email,obj.Email,obj.userName,obj.username,obj.loginEmail,obj.login_email];
+    for(const v of direct){if(email(v))return email(v)}
+    if(Array.isArray(obj.emails)){
+      const p=obj.emails.find(x=>x?.primary&&email(x?.value))||obj.emails.find(x=>email(x?.value));
+      if(p)return email(p.value);
+    }
+    if(obj.user){const e=pickEmail(obj.user);if(e)return e}
+    return "";
+  };
+  const pickName=(obj)=>norm(obj?.displayName||obj?.name?.formatted||obj?.name||obj?.user?.name||"");
   try{
-    links=(await table(T.managerResources)).filter(r=>F(r,"Actif")!==false);
-  }catch(e){
-    console.warn("Managers_Ressources indisponible pendant l’identification:",e);
-  }
-  const visibleIds=new Set(visible.map(r=>Number(r.id)));
-  const managerIds=[...new Set(
-    links.map(r=>rid(F(r,"Manager"))).filter(id=>id && visibleIds.has(Number(id)))
-  )];
-  if(managerIds.length!==1)return null;
-  return visible.find(r=>Number(r.id)===Number(managerIds[0]))||null;
+    const ti=await grist.docApi.getAccessToken({readOnly:true});
+    const u=new URL(ti.baseUrl,window.location.href);
+    const origin=u.origin;
+    const endpoints=["/api/scim/v2/Me","/api/session/access/active","/api/session/access/all","/api/profile/user"];
+    const attempts=[];
+    for(const ep of endpoints){
+      // Certaines versions de Grist acceptent le token widget en header,
+      // d'autres via ?auth=. On essaie les deux sans jamais stocker le token.
+      attempts.push({url:`${origin}${ep}`,opt:{headers:{Authorization:`Bearer ${ti.token}`}}});
+      attempts.push({url:`${origin}${ep}?auth=${encodeURIComponent(ti.token)}`,opt:{}});
+      attempts.push({url:`${origin}${ep}`,opt:{credentials:"include"}});
+    }
+    for(const a of attempts){
+      try{
+        const r=await fetch(a.url,a.opt);
+        if(!r.ok)continue;
+        const data=await r.json();
+        let e=pickEmail(data),n=pickName(data);
+        if(!e&&Array.isArray(data?.users)){
+          // Si une seule identité de session est retournée, elle peut porter l'email.
+          const candidates=data.users.map(x=>({email:pickEmail(x),name:pickName(x)})).filter(x=>x.email);
+          if(candidates.length===1){e=candidates[0].email;n=candidates[0].name}
+        }
+        if(e)return {email:e,name:n,source:ep};
+      }catch(_e){}
+    }
+  }catch(e){console.warn("Identité Grist via API indisponible:",e)}
+  return null;
 }
-
 async function identify(){
   const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
   if(rr.length===0)throw new Error("Aucune ressource autorisée pour cet utilisateur.");
 
-  // V1.47 : l’identité du connecté vient uniquement des données réellement
-  // visibles via les ACL Grist. ADMIN_PORTAIL / Owner_Email ne doivent jamais
-  // servir à usurper l’identité du connecté.
-  S.person=await inferVisiblePerson(rr);
-  if(!S.person){
-    throw new Error("Impossible d’identifier la ressource connectée : plusieurs lignes Ressources sont visibles et aucun manager unique n’est identifiable dans Managers_Ressources.");
+  S.person=null;
+  const ident=await currentGristIdentity();
+  if(ident?.email){
+    S.person=rr.find(r=>email(F(r,"Email","email"))===ident.email)||null;
+    if(!S.person){
+      throw new Error(`Le compte Grist ${ident.email} est connecté, mais aucune Ressource visible ne porte cet e-mail.`);
+    }
+    S.user={email:ident.email,name:ident.name||norm(F(S.person,"Nom","nom"))||ident.email};
+    S.accessLevel=`identity:${ident.source||"grist"}`;
+    return;
   }
 
+  // Compatibilité lorsque la version/configuration Grist n'expose pas l'email
+  // de session au widget. Une seule ligne visible reste non ambiguë.
+  if(rr.length===1){
+    S.person=rr[0];
+  }else{
+    // Pour les managers, les ACL peuvent rendre visibles le manager et son équipe.
+    // Managers_Ressources peut alors identifier le manager s'il est unique.
+    let links=[];
+    try{links=(await table(T.managerResources)).filter(r=>F(r,"Actif")!==false)}
+    catch(e){console.warn("Managers_Ressources indisponible pendant l’identification:",e)}
+    const visibleIds=new Set(rr.map(r=>Number(r.id)));
+    const managerIds=[...new Set(links.map(r=>rid(F(r,"Manager"))).filter(id=>id&&visibleIds.has(Number(id))))];
+    if(managerIds.length===1)S.person=rr.find(r=>Number(r.id)===Number(managerIds[0]))||null;
+  }
+
+  if(!S.person){
+    throw new Error("Impossible d’identifier le compte Grist connecté. Plusieurs Ressources sont visibles et l’API de session n’a pas fourni d’e-mail. Vérifiez l’accès à /api/scim/v2/Me (ou les ACL d’identité).");
+  }
   const mail=norm(F(S.person,"Email","email"));
   S.user={email:mail,name:norm(F(S.person,"Nom","nom"))||mail||"Collaborateur"};
 }
@@ -445,33 +492,20 @@ function showView(name){
   }
 }
 async function detectOwner(){
-  // V1.47 : ADMIN_PORTAIL et Owner_Email décrivent QUI est Owner, mais ne
-  // prouvent pas QUI est connecté. On ne donne donc le rôle Owner qu’après
-  // avoir identifié la ressource courante à partir des lignes visibles via ACL.
+  // V1.48 — un OWNER n'est reconnu que si l'e-mail de l'identité réellement
+  // connectée correspond à une ligne OWNER active. Un OWNER unique dans la
+  // table ne suffit plus : cela évite qu'une PMO hérite de l'identité Owner.
   S.isOwner=false;
   S.ownerBootstrap=null;
   try{
     const admins=await table(T.admins);
-    const opt=(await grist.getOptions())||{};
-    const configuredOwnerEmail=email(opt.Owner_Email||opt.ownerEmail||"");
-    const active=admins.filter(r=>F(r,"Actif")!==false && norm(F(r,"Role")).toUpperCase()==="OWNER");
-    let admin=null;
-    if(configuredOwnerEmail) admin=active.find(r=>email(F(r,"Email"))===configuredOwnerEmail);
-    else if(active.length===1) admin=active[0];
-
+    const active=admins.filter(r=>F(r,"Actif")!==false&&norm(F(r,"Role")).toUpperCase()==="OWNER");
+    const me=email(S.user?.email);
+    const admin=me?active.find(r=>email(F(r,"Email"))===me):null;
     if(admin){
-      const ownerEmail=email(F(admin,"Email"));
-      const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
-      const current=await inferVisiblePerson(rr);
-      const currentEmail=current?email(F(current,"Email","email")):"";
-
-      // Point de sécurité essentiel : aucune promotion Owner en cas d’identité
-      // ambiguë, et jamais simplement parce qu’ADMIN_PORTAIL ne contient qu’un OWNER.
-      if(current && currentEmail && currentEmail===ownerEmail){
-        S.isOwner=true;
-        S.accessLevel="owner-verified";
-        S.ownerBootstrap={email:norm(F(admin,"Email")),name:norm(F(admin,"Nom"))||norm(F(admin,"Email"))};
-      }
+      S.isOwner=true;
+      S.accessLevel="owner";
+      S.ownerBootstrap={email:norm(F(admin,"Email")),name:norm(F(admin,"Nom"))||norm(F(admin,"Email"))};
     }
   }catch(e){console.warn("Détection Owner indisponible:",e)}
   $("adminNav")?.classList.toggle("hidden",!S.isOwner);
@@ -609,9 +643,10 @@ async function boot(){
   $("refresh").onclick=async()=>{await syncAll("manual");await load();await loadManagerContext()};
   $("syncNow").onclick=async()=>{await syncAll("manual");await load();await loadManagerContext()};
   $("viewAsSelect").onchange=e=>setViewAs(e.target.value);
-  await detectOwner();
   await syncAll("startup")
-  await identify();await load();await loadLabels();showView(S.isOwner&&!S.person?"acl":"home");
+  await identify();
+  await detectOwner();
+  await load();await loadLabels();showView("home");
   setTimeout(()=>loadManagerContext().catch(e=>console.warn("Mode manager:",e)),0);
 }
 boot().catch(fatal);
