@@ -1,5 +1,5 @@
-const VERSION="V1.49";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
+const VERSION="V1.50";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 function syncConfig(){
@@ -91,55 +91,58 @@ const ep=d=>Math.floor(new Date(d+"T00:00:00").getTime()/1000), st=r=>norm(F(r,"
 const dt=v=>v?new Date(Number(v)*1000).toLocaleDateString("fr-FR"):"—";
 function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(const k of Object.keys(t))if(k!=="id")r[k]=t[k]?.[i];return r})}
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
-async function currentGristIdentity(){
-  // V1.48 — tente d'obtenir l'identité réelle de la session Grist.
-  // On ne déduit jamais l'identité du nombre de ressources visibles si l'email
-  // de session est disponible.
-  const pickEmail=(obj)=>{
-    if(!obj||typeof obj!=="object")return "";
-    const direct=[obj.email,obj.Email,obj.userName,obj.username,obj.loginEmail,obj.login_email];
-    for(const v of direct){if(email(v))return email(v)}
-    if(Array.isArray(obj.emails)){
-      const p=obj.emails.find(x=>x?.primary&&email(x?.value))||obj.emails.find(x=>email(x?.value));
-      if(p)return email(p.value);
-    }
-    if(obj.user){const e=pickEmail(obj.user);if(e)return e}
-    return "";
-  };
-  const pickName=(obj)=>norm(obj?.displayName||obj?.name?.formatted||obj?.name||obj?.user?.name||"");
+async function ensureIdentityTable(){
+  // V1.50 — Grist n'expose pas directement l'utilisateur réel au Custom Widget.
+  // On utilise donc une table technique dont les trigger formulas sont évaluées
+  // par Grist avec le vrai `user` qui exécute l'action.
   try{
-    const ti=await grist.docApi.getAccessToken({readOnly:true});
-    const u=new URL(ti.baseUrl,window.location.href);
-    const origin=u.origin;
-    const endpoints=["/api/scim/v2/Me","/api/session/access/active","/api/session/access/all","/api/profile/user"];
-    const attempts=[];
-    for(const ep of endpoints){
-      // Certaines versions de Grist acceptent le token widget en header,
-      // d'autres via ?auth=. On essaie les deux sans jamais stocker le token.
-      attempts.push({url:`${origin}${ep}`,opt:{headers:{Authorization:`Bearer ${ti.token}`}}});
-      attempts.push({url:`${origin}${ep}?auth=${encodeURIComponent(ti.token)}`,opt:{}});
-      attempts.push({url:`${origin}${ep}`,opt:{credentials:"include"}});
+    await grist.docApi.fetchTable(T.identity);
+    return true;
+  }catch(_e){
+    try{
+      await grist.docApi.applyUserActions([["AddTable",T.identity,[
+        {id:"Nonce",type:"Text",label:"Nonce"},
+        {id:"Email",type:"Text",label:"Email Grist",isFormula:false,formula:"user.Email",recalcWhen:0},
+        {id:"Nom",type:"Text",label:"Nom Grist",isFormula:false,formula:"user.Name",recalcWhen:0},
+        {id:"CreeLe",type:"DateTime:UTC",label:"Créé le",isFormula:false,formula:"NOW()",recalcWhen:0}
+      ]]]);
+      return true;
+    }catch(e){
+      console.warn("Création de SESSION_IDENTITE impossible:",e);
+      return false;
     }
-    for(const a of attempts){
-      try{
-        const r=await fetch(a.url,a.opt);
-        if(!r.ok)continue;
-        const data=await r.json();
-        let e=pickEmail(data),n=pickName(data);
-        if(!e&&Array.isArray(data?.users)){
-          // Si une seule identité de session est retournée, elle peut porter l'email.
-          const candidates=data.users.map(x=>({email:pickEmail(x),name:pickName(x)})).filter(x=>x.email);
-          if(candidates.length===1){e=candidates[0].email;n=candidates[0].name}
-        }
-        // Les jetons d'accès des custom widgets peuvent être exposés par Grist
-        // sous une identité technique anonyme. Ce n'est PAS l'utilisateur réel.
-        // Ne jamais rapprocher anon@getgrist.com d'une Ressource.
-        const technicalEmails=new Set(["anon@getgrist.com","anonymous@getgrist.com"]);
-        if(e && !technicalEmails.has(e) && !e.startsWith("anon@")) return {email:e,name:n,source:ep};
-      }catch(_e){}
+  }
+}
+async function currentGristIdentity(){
+  // La seule source d'identité autorisée est l'e-mail du vrai utilisateur Grist.
+  // Le token REST du widget peut être `anon@getgrist.com`; il n'est jamais utilisé.
+  const ok=await ensureIdentityTable();
+  if(!ok){
+    throw new Error("La table technique SESSION_IDENTITE est absente et ne peut pas être créée avec vos droits. Un administrateur doit ouvrir le module une fois ou créer cette table avec les trigger formulas user.Email et user.Name.");
+  }
+  const nonce=`rh-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let rowId=null;
+  try{
+    const ret=await grist.docApi.applyUserActions([["AddRecord",T.identity,null,{Nonce:nonce}]]);
+    // retValues contient normalement l'id créé, mais on recherche aussi par nonce
+    // pour rester compatible avec les différentes versions de Grist.
+    rowId=Number(ret?.retValues?.[0]||0)||null;
+    const rowsIdentity=rows(await grist.docApi.fetchTable(T.identity));
+    const rec=(rowId?rowsIdentity.find(r=>Number(r.id)===rowId):null)||rowsIdentity.find(r=>norm(F(r,"Nonce"))===nonce);
+    if(!rec)throw new Error("Grist n'a pas renvoyé la ligne d'identité créée.");
+    rowId=Number(rec.id)||rowId;
+    const e=email(F(rec,"Email"));
+    const n=norm(F(rec,"Nom"));
+    if(!e)throw new Error("La trigger formula user.Email de SESSION_IDENTITE n'a retourné aucun e-mail.");
+    if(e==="anon@getgrist.com"||e==="anonymous@getgrist.com"||e.startsWith("anon@")){
+      throw new Error(`Grist a fourni l'identité technique ${e} au lieu de l'utilisateur connecté. Vérifiez que Email est bien une trigger formula \`user.Email\` appliquée aux nouveaux enregistrements.`);
     }
-  }catch(e){console.warn("Identité Grist via API indisponible:",e)}
-  return null;
+    return {email:e,name:n,source:"trigger:user.Email"};
+  }finally{
+    if(rowId){
+      try{await grist.docApi.applyUserActions([["RemoveRecord",T.identity,rowId]])}catch(e){console.warn("Nettoyage SESSION_IDENTITE impossible:",e)}
+    }
+  }
 }
 async function identify(){
   const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
@@ -147,47 +150,16 @@ async function identify(){
 
   S.person=null;
   const ident=await currentGristIdentity();
-  if(ident?.email){
-    S.person=rr.find(r=>email(F(r,"Email","email"))===ident.email)||null;
-    if(!S.person){
-      throw new Error(`Le compte Grist ${ident.email} est connecté, mais aucune Ressource visible ne porte cet e-mail.`);
-    }
-    S.user={email:ident.email,name:ident.name||norm(F(S.person,"Nom","nom"))||ident.email};
-    S.accessLevel=`identity:${ident.source||"grist"}`;
-    return;
-  }
+  const connectedEmail=email(ident?.email);
+  if(!connectedEmail)throw new Error("Impossible de lire l'e-mail du compte Grist connecté.");
 
-  // Compatibilité lorsque la version/configuration Grist n'expose pas l'email
-  // de session au widget. Une seule ligne visible reste non ambiguë.
-  if(rr.length===1){
-    S.person=rr[0];
-  }else{
-    // Pour les managers, les ACL peuvent rendre visibles le manager et son équipe.
-    // Managers_Ressources peut alors identifier le manager s'il est unique.
-    let links=[];
-    try{links=(await table(T.managerResources)).filter(r=>F(r,"Actif")!==false)}
-    catch(e){console.warn("Managers_Ressources indisponible pendant l’identification:",e)}
-    const visibleIds=new Set(rr.map(r=>Number(r.id)));
-    const managerIds=[...new Set(links.map(r=>rid(F(r,"Manager"))).filter(id=>id&&visibleIds.has(Number(id))))];
-    if(managerIds.length===1)S.person=rr.find(r=>Number(r.id)===Number(managerIds[0]))||null;
-
-    // V1.49 — cas PMO : certaines ACL donnent à la PMO une visibilité plus large
-    // sur Ressources sans l'inscrire comme manager. Si une seule Ressource PMO
-    // est visible, elle constitue un fallback non ambigu pour l'identité métier.
-    if(!S.person){
-      const pmos=rr.filter(r=>norm(F(r,"Profil","profil")).toUpperCase()==="PMO");
-      if(pmos.length===1){
-        S.person=pmos[0];
-        S.accessLevel="fallback:pmo-unique";
-      }
-    }
-  }
-
+  S.person=rr.find(r=>email(F(r,"Email","email"))===connectedEmail)||null;
   if(!S.person){
-    throw new Error("Impossible d’identifier la ressource connectée : plusieurs lignes Ressources sont visibles, aucun manager unique n’est identifiable et aucune PMO unique n’est visible. Le compte technique anon@getgrist.com est ignoré car il ne représente pas l’utilisateur réel.");
+    throw new Error(`Le compte Grist ${connectedEmail} est connecté, mais aucune Ressource visible ne porte cet e-mail.`);
   }
-  const mail=norm(F(S.person,"Email","email"));
-  S.user={email:mail,name:norm(F(S.person,"Nom","nom"))||mail||"Collaborateur"};
+
+  S.user={email:connectedEmail,name:ident.name||norm(F(S.person,"Nom","nom"))||connectedEmail};
+  S.accessLevel="identity:trigger:user.Email";
 }
 async function load(){
   const [q,m,res]=await Promise.all([table(T.requests),table(T.motifs),table(T.resources)]);
