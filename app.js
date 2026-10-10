@@ -1,4 +1,4 @@
-const VERSION="V1.46";
+const VERSION="V1.47";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -91,52 +91,37 @@ const ep=d=>Math.floor(new Date(d+"T00:00:00").getTime()/1000), st=r=>norm(F(r,"
 const dt=v=>v?new Date(Number(v)*1000).toLocaleDateString("fr-FR"):"—";
 function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(const k of Object.keys(t))if(k!=="id")r[k]=t[k]?.[i];return r})}
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
+async function inferVisiblePerson(rr=null){
+  const visible=(rr||(await table(T.resources))).filter(r=>F(r,"Actif","actif")!==false);
+  if(visible.length===1)return visible[0];
+  if(visible.length===0)return null;
+
+  // Un manager peut voir sa propre ligne ET celles de ses ressources.
+  // Dans ce cas on retrouve son identité grâce à Managers_Ressources.
+  let links=[];
+  try{
+    links=(await table(T.managerResources)).filter(r=>F(r,"Actif")!==false);
+  }catch(e){
+    console.warn("Managers_Ressources indisponible pendant l’identification:",e);
+  }
+  const visibleIds=new Set(visible.map(r=>Number(r.id)));
+  const managerIds=[...new Set(
+    links.map(r=>rid(F(r,"Manager"))).filter(id=>id && visibleIds.has(Number(id)))
+  )];
+  if(managerIds.length!==1)return null;
+  return visible.find(r=>Number(r.id)===Number(managerIds[0]))||null;
+}
+
 async function identify(){
   const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
+  if(rr.length===0)throw new Error("Aucune ressource autorisée pour cet utilisateur.");
 
-  // Owner : le bootstrap ADMIN_PORTAIL reste prioritaire, mais on tente aussi
-  // de rattacher l'Owner à sa ligne Ressources via l'adresse e-mail.
-  // Les ids Grist étant propres à chaque document, l'e-mail est la clé
-  // fonctionnelle de rapprochement entre les documents.
-  if(S.isOwner && rr.length!==1){
-    const ownerEmail=email(S.ownerBootstrap?.email);
-    S.person=ownerEmail
-      ? (rr.find(r=>email(F(r,"Email","email"))===ownerEmail)||null)
-      : null;
-    S.user={email:S.ownerBootstrap?.email||"",name:S.ownerBootstrap?.name||"Owner"};
-    return;
-  }
-
-  if(rr.length===0){
-    throw new Error("Aucune ressource autorisée pour cet utilisateur.");
-  }
-
-  // Cas historique collaborateur : une seule ligne Ressources visible.
-  if(rr.length===1){
-    S.person=rr[0];
-  } else {
-    // Cas Manager : les ACL peuvent légitimement rendre visibles le manager
-    // ET ses ressources. On identifie alors la ligne du manager grâce à
-    // Managers_Ressources, sans exiger que Ressources ne contienne qu'une ligne.
-    let links=[];
-    try{
-      links=(await table(T.managerResources)).filter(r=>F(r,"Actif")!==false);
-    }catch(e){
-      console.warn("Managers_Ressources indisponible pendant l’identification:",e);
-    }
-
-    const visibleIds=new Set(rr.map(r=>Number(r.id)));
-    const managerIds=[...new Set(
-      links.map(r=>rid(F(r,"Manager"))).filter(id=>id && visibleIds.has(Number(id)))
-    )];
-
-    if(managerIds.length===1){
-      S.person=rr.find(r=>Number(r.id)===Number(managerIds[0]))||null;
-    }
-
-    if(!S.person){
-      throw new Error("Impossible d’identifier la ressource connectée : plusieurs lignes Ressources sont visibles et aucun manager unique n’est identifiable dans Managers_Ressources.");
-    }
+  // V1.47 : l’identité du connecté vient uniquement des données réellement
+  // visibles via les ACL Grist. ADMIN_PORTAIL / Owner_Email ne doivent jamais
+  // servir à usurper l’identité du connecté.
+  S.person=await inferVisiblePerson(rr);
+  if(!S.person){
+    throw new Error("Impossible d’identifier la ressource connectée : plusieurs lignes Ressources sont visibles et aucun manager unique n’est identifiable dans Managers_Ressources.");
   }
 
   const mail=norm(F(S.person,"Email","email"));
@@ -460,26 +445,35 @@ function showView(name){
   }
 }
 async function detectOwner(){
-  // Bootstrap V1.7 : l'espace Admin ne dépend plus des ACL Ressources.
-  // Le setup admin alimente ADMIN_PORTAIL avec les emails autorisés.
+  // V1.47 : ADMIN_PORTAIL et Owner_Email décrivent QUI est Owner, mais ne
+  // prouvent pas QUI est connecté. On ne donne donc le rôle Owner qu’après
+  // avoir identifié la ressource courante à partir des lignes visibles via ACL.
   S.isOwner=false;
+  S.ownerBootstrap=null;
   try{
     const admins=await table(T.admins);
-    // Tant que l'identité Grist n'est pas directement exposée par l'API widget,
-    // le bootstrap Owner s'appuie sur une option locale réservée à l'installation
-    // OU sur un ADMIN_PORTAIL unique. Le setup peut créer cette ligne avant les ACL.
     const opt=(await grist.getOptions())||{};
-    const ownerEmail=email(opt.Owner_Email||opt.ownerEmail||"");
+    const configuredOwnerEmail=email(opt.Owner_Email||opt.ownerEmail||"");
     const active=admins.filter(r=>F(r,"Actif")!==false && norm(F(r,"Role")).toUpperCase()==="OWNER");
     let admin=null;
-    if(ownerEmail) admin=active.find(r=>email(F(r,"Email"))===ownerEmail);
+    if(configuredOwnerEmail) admin=active.find(r=>email(F(r,"Email"))===configuredOwnerEmail);
     else if(active.length===1) admin=active[0];
+
     if(admin){
-      S.isOwner=true;
-      S.accessLevel="owner-bootstrap";
-      S.ownerBootstrap={email:norm(F(admin,"Email")),name:norm(F(admin,"Nom"))||norm(F(admin,"Email"))};
+      const ownerEmail=email(F(admin,"Email"));
+      const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
+      const current=await inferVisiblePerson(rr);
+      const currentEmail=current?email(F(current,"Email","email")):"";
+
+      // Point de sécurité essentiel : aucune promotion Owner en cas d’identité
+      // ambiguë, et jamais simplement parce qu’ADMIN_PORTAIL ne contient qu’un OWNER.
+      if(current && currentEmail && currentEmail===ownerEmail){
+        S.isOwner=true;
+        S.accessLevel="owner-verified";
+        S.ownerBootstrap={email:norm(F(admin,"Email")),name:norm(F(admin,"Nom"))||norm(F(admin,"Email"))};
+      }
     }
-  }catch(e){console.warn("Bootstrap Owner indisponible:",e)}
+  }catch(e){console.warn("Détection Owner indisponible:",e)}
   $("adminNav")?.classList.toggle("hidden",!S.isOwner);
 }
 function bindNav(){
