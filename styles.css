@@ -681,3 +681,6 @@ main > header.app-header .header-identity{
     justify-content:space-between;
   }
 }
+
+/* V1.51 — diagnostic */
+.version,.version-brand{color:#fff!important}.debug-card{padding-bottom:18px}.debug-toggle{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding-right:22px}.debug-toggle input{width:auto}.debug-actions{display:flex;justify-content:flex-end;padding:0 22px 12px}.debug-pre{margin:0 22px 22px;padding:16px;max-height:520px;overflow:auto;background:#0b1220;color:#d8e5ff;border-radius:12px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.debug-fatal{margin-top:12px}.debug-fatal .debug-pre{margin-bottom:18px}#fatalDebugBtn{margin-top:10px}

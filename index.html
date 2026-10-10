@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.50</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.51</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.50</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.51</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -19,6 +19,7 @@
     <button class="accordion-item accordion-admin nav manager-admin-only" data-view="managers">♧ <span>Managers & Ressources</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="motifs">◇ <span>Motifs RH</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="acl">◈ <span>ACL & Permissions</span></button>
+    <button class="accordion-item accordion-admin nav owner-only" data-view="debug">⌁ <span>Diagnostic</span></button>
     <button class="accordion-item accordion-admin nav" data-view="labels">✎ <span>Libellés de l’application</span></button>
     
   </div>
@@ -32,6 +33,8 @@
 <main class="content">
 <header class="app-header"><div class="header-actions"><div id="viewAsBar" class="view-as-bar hidden"><label for="viewAsSelect">Voir comme</label><select id="viewAsSelect" aria-label="Voir comme"><option value="">Moi-même</option></select><span class="readonly-badge">🔒 Lecture seule</span></div><button id="refresh" class="iconbtn" title="Actualiser">↻</button></div><div class="header-identity"><div class="eyebrow">ESPACE RH</div><h1 id="pageTitle" data-label-key="page.home">Bonjour</h1><p id="identity">Identification…</p></div></header>
 <div id="fatal" class="alert danger hidden"></div>
+<button id="fatalDebugBtn" class="secondary hidden" type="button">Activer / afficher le diagnostic</button>
+<div id="fatalDebug" class="card debug-fatal hidden"><div class="section-head"><div><h3>Diagnostic de démarrage</h3><p>Copiez ce bloc pour analyser l’identification Grist.</p></div></div><pre id="fatalDebugOutput" class="debug-pre"></pre></div>
 <section id="setup" class="card hidden"><h2>Initialisation</h2></section>
 <div id="app" class="hidden">
 <section id="view-home" class="view active">
@@ -105,6 +108,15 @@
  <div id="aclResults" class="checks"><div class="empty">Lancez un audit pour afficher le diagnostic.</div></div>
  <div class="acl-actions"><button id="applyAcl" class="dangerbtn" disabled>Appliquer les corrections</button><span>Confirmation obligatoire avant application.</span></div></div></div>
 </section>
+<section id="view-debug" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">DIAGNOSTIC</span><h2>Mode debug</h2><p>Affiche les étapes d’identification sans modifier les droits ni les données métier.</p></div></div>
+ <div class="card debug-card">
+  <div class="section-head"><div><h3>Journal technique</h3><p id="debugStatus">Inactif</p></div><label class="debug-toggle"><input id="debugToggle" type="checkbox"> Activer le mode debug</label></div>
+  <div class="debug-actions"><button id="copyDebugBtn" class="secondary" type="button">Copier le diagnostic</button></div>
+  <pre id="debugOutput" class="debug-pre"></pre>
+ </div>
+</section>
+
 <section id="view-sync" class="view adminview"><div class="pagehead"><div><span class="pill adminpill">ADMIN</span><h2>Synchronisation</h2><p>État des échanges avec le Cockpit RH.</p></div></div><div class="card"><div id="syncAdmin" class="admin-content"></div></div></section>
 </div></main></div>
 <script src="app.js"></script></body></html>

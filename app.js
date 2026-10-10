@@ -1,7 +1,64 @@
-const VERSION="V1.50";
+const VERSION="V1.51";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[]};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
+const DEBUG_KEY="rh_debug_enabled";
+function debugIsEnabled(){
+  try{
+    const q=new URLSearchParams(location.search);
+    return q.get("debug")==="1" || localStorage.getItem(DEBUG_KEY)==="1";
+  }catch{return false}
+}
+function debugSafe(v){
+  try{
+    if(v===undefined)return null;
+    return JSON.parse(JSON.stringify(v,(k,x)=>{
+      if(/api.?key|token|authorization|password|secret/i.test(k))return "[masqué]";
+      return x;
+    }));
+  }catch{return String(v)}
+}
+function dlog(step,data={}){
+  const entry={time:new Date().toISOString(),step,data:debugSafe(data)};
+  S.debugLog.push(entry);
+  if(S.debugLog.length>200)S.debugLog.shift();
+  if(S.debugEnabled)console.info("[RH DEBUG]",step,entry.data);
+  renderDebug();
+}
+function setDebugEnabled(enabled){
+  S.debugEnabled=!!enabled;
+  try{localStorage.setItem(DEBUG_KEY,enabled?"1":"0")}catch{}
+  dlog("debug.toggle",{enabled:S.debugEnabled,version:VERSION});
+  renderDebug();
+}
+function resourceSummary(r){return r?{id:r.id,email:email(F(r,"Email","email")),nom:norm(F(r,"Nom","nom")),profil:norm(F(r,"Profil","profil")),actif:F(r,"Actif","actif")}:null}
+function renderDebug(){
+  const pre=$("debugOutput"), chk=$("debugToggle"), status=$("debugStatus");
+  if(chk)chk.checked=!!S.debugEnabled;
+  if(status)status.textContent=S.debugEnabled?`Actif · ${VERSION}`:`Inactif · ${VERSION}`;
+  const fatalPre=$("fatalDebugOutput");
+  if(!pre&&!fatalPre)return;
+  const snapshot={
+    version:VERSION,
+    url:location.href,
+    debugEnabled:S.debugEnabled,
+    user:S.user,
+    person:resourceSummary(S.person),
+    isOwner:S.isOwner,
+    isAdmin:S.isAdmin,
+    ownerBootstrap:S.ownerBootstrap,
+    accessLevel:S.accessLevel,
+    visibleResources:(S.resources||[]).map(resourceSummary),
+    log:S.debugLog
+  };
+  const txt=JSON.stringify(snapshot,null,2);
+  if(pre)pre.textContent=txt;
+  if(fatalPre)fatalPre.textContent=txt;
+}
+function showDebugFromFatal(){
+  const box=$("fatalDebug"); if(box)box.classList.remove("hidden");
+  renderDebug();
+}
 function syncConfig(){
   // Configuration utilisateur/session uniquement. Ne jamais embarquer une clé maître dans le code.
   // Pour une installation Grist autorisant l'API avec les droits propres de l'utilisateur,
@@ -92,11 +149,13 @@ const dt=v=>v?new Date(Number(v)*1000).toLocaleDateString("fr-FR"):"—";
 function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(const k of Object.keys(t))if(k!=="id")r[k]=t[k]?.[i];return r})}
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
 async function ensureIdentityTable(){
+  dlog("identity.table.ensure.start",{table:T.identity});
   // V1.50 — Grist n'expose pas directement l'utilisateur réel au Custom Widget.
   // On utilise donc une table technique dont les trigger formulas sont évaluées
   // par Grist avec le vrai `user` qui exécute l'action.
   try{
     await grist.docApi.fetchTable(T.identity);
+    dlog("identity.table.ensure.exists",{table:T.identity});
     return true;
   }catch(_e){
     try{
@@ -106,14 +165,17 @@ async function ensureIdentityTable(){
         {id:"Nom",type:"Text",label:"Nom Grist",isFormula:false,formula:"user.Name",recalcWhen:0},
         {id:"CreeLe",type:"DateTime:UTC",label:"Créé le",isFormula:false,formula:"NOW()",recalcWhen:0}
       ]]]);
+      dlog("identity.table.ensure.created",{table:T.identity});
       return true;
     }catch(e){
+      dlog("identity.table.ensure.error",{message:e?.message||String(e)});
       console.warn("Création de SESSION_IDENTITE impossible:",e);
       return false;
     }
   }
 }
 async function currentGristIdentity(){
+  dlog("identity.probe.start",{version:VERSION});
   // La seule source d'identité autorisée est l'e-mail du vrai utilisateur Grist.
   // Le token REST du widget peut être `anon@getgrist.com`; il n'est jamais utilisé.
   const ok=await ensureIdentityTable();
@@ -124,42 +186,52 @@ async function currentGristIdentity(){
   let rowId=null;
   try{
     const ret=await grist.docApi.applyUserActions([["AddRecord",T.identity,null,{Nonce:nonce}]]);
+    dlog("identity.probe.addRecord",{nonce,retValues:ret?.retValues||null});
     // retValues contient normalement l'id créé, mais on recherche aussi par nonce
     // pour rester compatible avec les différentes versions de Grist.
     rowId=Number(ret?.retValues?.[0]||0)||null;
     const rowsIdentity=rows(await grist.docApi.fetchTable(T.identity));
+    dlog("identity.probe.rows",{count:rowsIdentity.length,rows:rowsIdentity.map(r=>({id:r.id,Nonce:F(r,"Nonce"),Email:F(r,"Email"),Nom:F(r,"Nom")}))});
     const rec=(rowId?rowsIdentity.find(r=>Number(r.id)===rowId):null)||rowsIdentity.find(r=>norm(F(r,"Nonce"))===nonce);
     if(!rec)throw new Error("Grist n'a pas renvoyé la ligne d'identité créée.");
     rowId=Number(rec.id)||rowId;
     const e=email(F(rec,"Email"));
     const n=norm(F(rec,"Nom"));
     if(!e)throw new Error("La trigger formula user.Email de SESSION_IDENTITE n'a retourné aucun e-mail.");
+    dlog("identity.probe.result",{email:e,name:n,rowId});
     if(e==="anon@getgrist.com"||e==="anonymous@getgrist.com"||e.startsWith("anon@")){
       throw new Error(`Grist a fourni l'identité technique ${e} au lieu de l'utilisateur connecté. Vérifiez que Email est bien une trigger formula \`user.Email\` appliquée aux nouveaux enregistrements.`);
     }
     return {email:e,name:n,source:"trigger:user.Email"};
   }finally{
     if(rowId){
-      try{await grist.docApi.applyUserActions([["RemoveRecord",T.identity,rowId]])}catch(e){console.warn("Nettoyage SESSION_IDENTITE impossible:",e)}
+      try{await grist.docApi.applyUserActions([["RemoveRecord",T.identity,rowId]]);dlog("identity.probe.cleanup",{rowId})}catch(e){dlog("identity.probe.cleanup.error",{rowId,message:e?.message||String(e)});console.warn("Nettoyage SESSION_IDENTITE impossible:",e)}
     }
   }
 }
 async function identify(){
-  const rr=(await table(T.resources)).filter(r=>F(r,"Actif","actif")!==false);
+  dlog("identify.start",{});
+  const allResources=await table(T.resources);
+  S.resources=allResources;
+  const rr=allResources.filter(r=>F(r,"Actif","actif")!==false);
+  dlog("identify.resources",{total:allResources.length,active:rr.length,rows:rr.map(resourceSummary)});
   if(rr.length===0)throw new Error("Aucune ressource autorisée pour cet utilisateur.");
 
   S.person=null;
   const ident=await currentGristIdentity();
+  dlog("identify.gristIdentity",ident);
   const connectedEmail=email(ident?.email);
   if(!connectedEmail)throw new Error("Impossible de lire l'e-mail du compte Grist connecté.");
 
   S.person=rr.find(r=>email(F(r,"Email","email"))===connectedEmail)||null;
+  dlog("identify.match",{connectedEmail,matched:resourceSummary(S.person)});
   if(!S.person){
     throw new Error(`Le compte Grist ${connectedEmail} est connecté, mais aucune Ressource visible ne porte cet e-mail.`);
   }
 
   S.user={email:connectedEmail,name:ident.name||norm(F(S.person,"Nom","nom"))||connectedEmail};
   S.accessLevel="identity:trigger:user.Email";
+  dlog("identify.success",{user:S.user,person:resourceSummary(S.person)});
 }
 async function load(){
   const [q,m,res]=await Promise.all([table(T.requests),table(T.motifs),table(T.resources)]);
@@ -183,11 +255,11 @@ function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Co
 // V1.29 — libellés administrables localement dans Grist
 const LABEL_DEFS=[
  ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.all","Menu","Autres demandes"],
- ["nav.resources","Menu","Ressources"],["nav.motifs","Menu","Motifs RH"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
+ ["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.motifs","Menu","Motifs RH"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
  ["section.space","Menu","MON ESPACE"],["section.admin","Menu","ADMINISTRATION"],
  ["brand.title","En-tête","Demandes RH"],["brand.subtitle","En-tête","Portail collaborateur"],["header.eyebrow","En-tête","ESPACE RH"],
  ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.all","Pages","Autres demandes"],
- ["page.resources","Pages","Ressources"],["page.motifs","Pages","Motifs RH"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
+ ["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.motifs","Pages","Motifs RH"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
  ["home.pill","Accueil","Portail collaborateur"],["home.hero","Accueil","Gérez vos demandes simplement."],
  ["mine.pill","Mes demandes","SUIVI"],["mine.title","Mes demandes","Mes demandes"],["mine.subtitle","Mes demandes","Historique et état de traitement."],
  ["all.pill","Autres demandes","ADMIN"],["all.title","Autres demandes","Autres demandes"],
@@ -231,7 +303,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",all:"nav.all",resources:"nav.resources",managers:"nav.managers",motifs:"nav.motifs",acl:"nav.acl",labels:"nav.labels"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",acl:"nav.acl",labels:"nav.labels"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -479,6 +551,7 @@ function showView(name){
   }
 }
 async function detectOwner(){
+  dlog("owner.detect.start",{user:S.user,person:resourceSummary(S.person)});
   // V1.48 — un OWNER n'est reconnu que si l'e-mail de l'identité réellement
   // connectée correspond à une ligne OWNER active. Un OWNER unique dans la
   // table ne suffit plus : cela évite qu'une PMO hérite de l'identité Owner.
@@ -493,6 +566,7 @@ async function detectOwner(){
       S.isOwner=true;
       S.accessLevel="owner";
       S.ownerBootstrap={email:norm(F(admin,"Email")),name:norm(F(admin,"Nom"))||norm(F(admin,"Email"))};
+      dlog("owner.detect.match",{admin:{id:admin.id,email:S.ownerBootstrap.email,name:S.ownerBootstrap.name}});
     }
   }catch(e){console.warn("Détection Owner indisponible:",e)}
   $("adminNav")?.classList.toggle("hidden",!S.isOwner);
@@ -608,11 +682,22 @@ async function save(){
 }
 async function cancelReq(id){const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await syncRequestToCockpit(id);await load()}
 function msg(t){$("msg").textContent=t;$("msg").classList.remove("hidden")}
-function fatal(e){$("fatal").textContent=e?.message||String(e);$("fatal").classList.remove("hidden");$("app").classList.add("hidden")}
+function fatal(e){
+  const message=e?.message||String(e);
+  dlog("fatal",{message,stack:e?.stack||""});
+  $("fatal").textContent=`${message} · ${VERSION}`;$("fatal").classList.remove("hidden");$("app").classList.add("hidden");
+  const btn=$("fatalDebugBtn"); if(btn)btn.classList.remove("hidden");
+  if(S.debugEnabled)showDebugFromFatal();
+}
 async function boot(){
+  S.debugEnabled=debugIsEnabled();
+  dlog("boot.start",{version:VERSION,debugEnabled:S.debugEnabled,userAgent:navigator.userAgent});
   grist.ready({requiredAccess:"full"});
   bindNav();
   $("auditAcl").onclick=auditAcl;
+  if($("debugToggle")) $("debugToggle").onchange=e=>setDebugEnabled(e.target.checked);
+  if($("copyDebugBtn")) $("copyDebugBtn").onclick=async()=>{try{await navigator.clipboard.writeText($("debugOutput")?.textContent||"");$("copyDebugBtn").textContent="Copié ✓";setTimeout(()=>$("copyDebugBtn").textContent="Copier le diagnostic",1200)}catch(e){dlog("debug.copy.error",{message:e?.message||String(e)})}};
+  if($("fatalDebugBtn")) $("fatalDebugBtn").onclick=()=>{setDebugEnabled(true);showDebugFromFatal()};
   $("newMotifBtn").onclick=()=>openMotifEditor();
   $("closeMotif").onclick=closeMotifEditor;
   $("cancelMotif").onclick=closeMotifEditor;
@@ -630,6 +715,7 @@ async function boot(){
   $("refresh").onclick=async()=>{await syncAll("manual");await load();await loadManagerContext()};
   $("syncNow").onclick=async()=>{await syncAll("manual");await load();await loadManagerContext()};
   $("viewAsSelect").onchange=e=>setViewAs(e.target.value);
+  renderDebug();
   await syncAll("startup")
   await identify();
   await detectOwner();
@@ -671,7 +757,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","all"],
-    admin: ["resources","managers","motifs","acl","labels","sync"]
+    admin: ["resources","managers","motifs","acl","labels","debug","sync"]
   };
 
   const applyAccordion = (open) => {
