@@ -1,4 +1,4 @@
-const VERSION="V1.48";
+const VERSION="V1.49";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -131,7 +131,11 @@ async function currentGristIdentity(){
           const candidates=data.users.map(x=>({email:pickEmail(x),name:pickName(x)})).filter(x=>x.email);
           if(candidates.length===1){e=candidates[0].email;n=candidates[0].name}
         }
-        if(e)return {email:e,name:n,source:ep};
+        // Les jetons d'accès des custom widgets peuvent être exposés par Grist
+        // sous une identité technique anonyme. Ce n'est PAS l'utilisateur réel.
+        // Ne jamais rapprocher anon@getgrist.com d'une Ressource.
+        const technicalEmails=new Set(["anon@getgrist.com","anonymous@getgrist.com"]);
+        if(e && !technicalEmails.has(e) && !e.startsWith("anon@")) return {email:e,name:n,source:ep};
       }catch(_e){}
     }
   }catch(e){console.warn("Identité Grist via API indisponible:",e)}
@@ -166,10 +170,21 @@ async function identify(){
     const visibleIds=new Set(rr.map(r=>Number(r.id)));
     const managerIds=[...new Set(links.map(r=>rid(F(r,"Manager"))).filter(id=>id&&visibleIds.has(Number(id))))];
     if(managerIds.length===1)S.person=rr.find(r=>Number(r.id)===Number(managerIds[0]))||null;
+
+    // V1.49 — cas PMO : certaines ACL donnent à la PMO une visibilité plus large
+    // sur Ressources sans l'inscrire comme manager. Si une seule Ressource PMO
+    // est visible, elle constitue un fallback non ambigu pour l'identité métier.
+    if(!S.person){
+      const pmos=rr.filter(r=>norm(F(r,"Profil","profil")).toUpperCase()==="PMO");
+      if(pmos.length===1){
+        S.person=pmos[0];
+        S.accessLevel="fallback:pmo-unique";
+      }
+    }
   }
 
   if(!S.person){
-    throw new Error("Impossible d’identifier le compte Grist connecté. Plusieurs Ressources sont visibles et l’API de session n’a pas fourni d’e-mail. Vérifiez l’accès à /api/scim/v2/Me (ou les ACL d’identité).");
+    throw new Error("Impossible d’identifier la ressource connectée : plusieurs lignes Ressources sont visibles, aucun manager unique n’est identifiable et aucune PMO unique n’est visible. Le compte technique anon@getgrist.com est ignoré car il ne représente pas l’utilisateur réel.");
   }
   const mail=norm(F(S.person,"Email","email"));
   S.user={email:mail,name:norm(F(S.person,"Nom","nom"))||mail||"Collaborateur"};
