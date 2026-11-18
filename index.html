@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.54</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.59</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.54</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.59</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -23,6 +23,7 @@
     <button class="accordion-item accordion-admin nav owner-only" data-view="acl">◈ <span>ACL & Permissions</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="debug">⌁ <span>Diagnostic</span></button>
     <button class="accordion-item accordion-admin nav" data-view="labels">✎ <span>Libellés de l’application</span></button>
+    <button class="accordion-item accordion-admin nav" data-view="menuOrder">↕ <span>Ordre des menus</span></button>
     
   </div>
   <div class="syncmini" id="syncMini">
@@ -42,7 +43,7 @@
 <section id="view-home" class="view active">
  <div class="hero card"><div><span class="pill">Portail collaborateur</span><h2>Gérez vos demandes simplement.</h2><p>Créez une demande, suivez son traitement et consultez les décisions depuis un espace unique.</p><button class="primary" data-go="new">Créer une demande</button></div><div class="hero-art"><span>✓</span></div></div>
  <div class="kpis"><div class="kpi"><small>EN ATTENTE</small><strong id="kw">0</strong><span>À traiter</span></div><div class="kpi"><small>VALIDÉES</small><strong id="kv">0</strong><span>Acceptées</span></div><div class="kpi"><small>REFUSÉES</small><strong id="kr">0</strong><span>Décisions</span></div></div>
- <div class="card"><div class="section-head"><div><h3>Dernières demandes</h3><p>Votre activité récente</p></div><button class="ghost" data-go="mine">Tout afficher →</button></div><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody id="rowsHome"></tbody></table></div></div>
+ <div class="card"><div class="section-head"><div><h3>Dernières demandes</h3><p>Votre activité récente</p></div><button class="ghost" data-go="mine">Tout afficher →</button></div><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Date début</th><th>Date fin</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody id="rowsHome"></tbody></table></div></div>
 </section>
 <section id="view-new" class="view">
  <div class="pagehead"><div><span class="pill">DEMANDE</span><h2 id="formTitle">Nouvelle demande</h2><p>Renseignez la période et le motif. Votre manager recevra la demande après synchronisation.</p></div></div>
@@ -55,7 +56,7 @@
 </section>
 <section id="view-mine" class="view">
  <div class="pagehead"><div><span class="pill">SUIVI</span><h2 data-label-key="mine.title">Mes demandes</h2><p>Historique et état de traitement.</p></div><button id="newBtn" class="primary" data-go="new">＋ Nouvelle demande</button></div>
- <div class="card"><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+ <div class="card"><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Date début</th><th>Date fin</th><th>Motif</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 </section>
 
 <section id="view-planning" class="view">
@@ -72,7 +73,7 @@
  <div class="pagehead"><div><span class="pill adminpill">ADMIN</span><h2>Autres demandes</h2><p>Demandes des autres utilisateurs, réservées au profil ADMIN. Les demandes personnelles restent dans « Mes demandes ».</p></div></div>
  <div class="card all-requests-card">
   <div class="all-requests-filters"><label>Équipe<select id="allTeamFilter"><option value="">Toutes les équipes</option></select></label><label>Ressource<select id="allResourceFilter"><option value="">Toutes les ressources</option></select></label><span id="allRequestsCount" class="all-requests-count"></span></div>
-  <div class="tablewrap"><table><thead><tr><th>Ressource</th><th>Référence</th><th>Type</th><th>Période</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody id="rowsAll"></tbody></table></div>
+  <div class="tablewrap"><table><thead><tr><th>Ressource</th><th>Référence</th><th>Type</th><th>Date début</th><th>Date fin</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody id="rowsAll"></tbody></table></div>
  </div>
 </section>
 <section id="view-resources" class="view adminview">
@@ -112,6 +113,14 @@
   <div id="presenceMapMsg" class="alert hidden"></div>
   <div class="tablewrap"><table><thead><tr><th>Code</th><th>Motif RH</th><th>Impact présence</th><th>État</th><th>Commentaire</th><th></th></tr></thead><tbody id="presenceMapRows"></tbody></table></div>
  </div>
+</section>
+
+
+<section id="view-menuOrder" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">PERSONNALISATION</span><h2>Ordre des menus</h2><p>Définissez l’ordre d’affichage des rubriques de la section Administration.</p></div></div>
+ <div id="menuOrderSetup" class="card"><div class="section-head"><div><h3>Paramétrage</h3><p id="menuOrderSetupText">Vérification de <strong>PARAM_MENU_ORDRE</strong>…</p></div><button id="initMenuOrderBtn" class="primary">Initialiser / compléter la table</button></div></div>
+ <div id="menuOrderMsg" class="alert hidden"></div>
+ <div id="menuOrderManager" class="card hidden"><div class="section-head"><div><h3>Ordre des rubriques</h3><p>Utilisez les flèches pour déplacer une rubrique. L’ordre est enregistré dans Grist.</p></div></div><div class="tablewrap"><table><thead><tr><th>Position</th><th>Menu</th><th>Clé</th><th>Déplacer</th></tr></thead><tbody id="menuOrderRows"></tbody></table></div></div>
 </section>
 
 <section id="view-labels" class="view adminview">

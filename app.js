@@ -1,6 +1,6 @@
-const VERSION="V1.57";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null};
+const VERSION="V1.59";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE"};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 const DEBUG_KEY="rh_debug_enabled";
 function debugIsEnabled(){
@@ -130,8 +130,7 @@ async function syncRequestToCockpit(localId){
   const code=norm(F(localReq,"Motif_Code")); const motif=motifs.find(x=>norm(x.fields?.Code)===code);
   if(!motif)throw new Error(`Motif '${code}' absent du Cockpit.`);
   const uuid=norm(F(localReq,"UUID_Demande")), found=reqs.find(x=>norm(x.fields?.UUID_Demande)===uuid);
-  const fields={Reference:F(localReq,"Reference"),Demandeur:person.id,Type:F(localReq,"Type"),Date_Debut:F(localReq,"Date_Debut"),Date_Fin:F(localReq,"Date_Fin"),Motif:motif.id,Commentaire_Demandeur:F(localReq,"Commentaire_Demandeur"),Date_Demande:F(localReq,"Date_Demande"),UUID_Demande:uuid};
-  if(!found)fields.Statut=F(localReq,"Statut")||"EN_ATTENTE";
+  const fields={Reference:F(localReq,"Reference"),Demandeur:person.id,Type:F(localReq,"Type"),Date_Debut:F(localReq,"Date_Debut"),Date_Fin:F(localReq,"Date_Fin"),Motif:motif.id,Commentaire_Demandeur:F(localReq,"Commentaire_Demandeur"),Date_Demande:F(localReq,"Date_Demande"),UUID_Demande:uuid,Statut:F(localReq,"Statut")||"EN_ATTENTE"};
   const path=`/docs/${encodeURIComponent(c.cockpitDocId)}/tables/Demandes_RH/records`;
   if(found) await remote(path,{method:"PATCH",body:{records:[{id:found.id,fields}]}});
   else await remote(path,{method:"POST",body:{records:[{fields}]}});
@@ -146,6 +145,13 @@ const rid=v=>Number(Array.isArray(v)?v[1]:(v?.id??v??0))||0;
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ep=d=>Math.floor(new Date(d+"T00:00:00").getTime()/1000), st=r=>norm(F(r,"Statut")||"EN_ATTENTE").toUpperCase();
 const dt=v=>v?new Date(Number(v)*1000).toLocaleDateString("fr-FR"):"—";
+const todayStart=()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime()};
+const canCancel=r=>{
+  const status=st(r);
+  if(status==="ANNULEE"||status==="REFUSEE")return false;
+  const start=Number(F(r,"Date_Debut")||0)*1000;
+  return Boolean(start)&&start>=todayStart();
+};
 function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(const k of Object.keys(t))if(k!=="id")r[k]=t[k]?.[i];return r})}
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
 async function ensureIdentityTable(){
@@ -277,7 +283,7 @@ const LABEL_DEFS=[
  ["acl.pill","ACL","SECURITY CENTER"],["acl.title","ACL","ACL & Permissions"],["acl.audit","ACL","Audit des permissions"],
  ["motifs.pill","Motifs","RÉFÉRENTIEL LOCAL"],["motifs.new","Motifs","Nouveau motif"],["motifs.active","Motifs","Motif actif"],
  ["resources.title","Ressources","Ressources"],
- ["nav.managers","Menu","Managers & Ressources"],["page.managers","Pages","Managers & Ressources"],];
+ ["nav.managers","Menu","Managers & Ressources"],["page.managers","Pages","Managers & Ressources"],["nav.menuOrder","Menu","Ordre des menus"],["page.menuOrder","Pages","Ordre des menus"],];
 const LABEL_BY_DEFAULT=Object.fromEntries(LABEL_DEFS.map(([k,c,d])=>[d,k]));
 function labelMap(){return Object.fromEntries((S.labels||[]).map(r=>[norm(F(r,"Cle")),norm(F(r,"Libelle"))]).filter(([k,v])=>k&&v))}
 function L(key,fallback=""){return labelMap()[key]||fallback||LABEL_DEFS.find(x=>x[0]===key)?.[2]||key}
@@ -303,7 +309,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -537,12 +543,13 @@ function showView(name){
   if(["resources","motifs","presenceMap","acl","sync"].includes(name)&&!S.isOwner)return;
   if(name==="managers"&&!(S.isAdmin||S.isOwner))return;
   if(name==="labels"&&!(S.isAdmin||S.isOwner))return;
+  if(name==="menuOrder"&&!(S.isAdmin||S.isOwner))return;
   if(name==="all"&&!(S.isAdmin||S.isOwner))return;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"]};
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"]};
   if(name==="presenceMap")setTimeout(()=>renderPresenceMapAdmin().catch(showPresenceMapError),0);
   if(name==="planning")setTimeout(()=>loadPlanning().catch(showPlanningError),0);
   const t=titles[name];
@@ -865,7 +872,17 @@ function render(){
   $("kv").textContent=S.myRequests.filter(r=>st(r)==="VALIDEE").length;
   $("kr").textContent=S.myRequests.filter(r=>st(r)==="REFUSEE").length;
   const resourceById=id=>(S.resources||[]).find(x=>Number(x.id)===Number(id));
-  const makeRows=(items,actions=true,showResource=false)=>items.length?items.map(r=>{const e=st(r)==="EN_ATTENTE";const resource=resourceById(rid(F(r,"Demandeur")));const resourceCell=showResource?`<td><strong>${esc(resource?resLabel(resource):"Ressource #"+rid(F(r,"Demandeur")))}</strong></td>`:"";return `<tr>${resourceCell}<td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actions&&e?`<div class="rowactions"><button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button></div>`:""}</td></tr>`}).join(""):`<tr><td colspan="${showResource?7:6}">Aucune demande.</td></tr>`;
+  const makeRows=(items,actions=true,showResource=false)=>items.length?items.map(r=>{
+    const editable=st(r)==="EN_ATTENTE";
+    const cancellable=canCancel(r);
+    const resource=resourceById(rid(F(r,"Demandeur")));
+    const resourceCell=showResource?`<td><strong>${esc(resource?resLabel(resource):"Ressource #"+rid(F(r,"Demandeur")))}</strong></td>`:"";
+    const actionButtons=[];
+    if(actions&&editable)actionButtons.push(`<button class="secondary" data-e="${r.id}">Modifier</button>`);
+    if(actions&&cancellable)actionButtons.push(`<button class="secondary" data-c="${r.id}">Annuler</button>`);
+    const actionsCell=actionButtons.length?`<div class="rowactions">${actionButtons.join("")}</div>`:"";
+    return `<tr>${resourceCell}<td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))}</td><td>${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actionsCell}</td></tr>`
+  }).join(""):`<tr><td colspan="${showResource?8:7}">Aucune demande.</td></tr>`;
   $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),!S.viewAs);
   $("rowsHome").innerHTML=makeRows(S.myRequests.slice().reverse().slice(0,5),false);
   if($("rowsAll")){
@@ -927,7 +944,19 @@ async function save(){
   }
   reset();await load();
 }
-async function cancelReq(id){const r=S.myRequests.find(x=>x.id===id);if(!r||st(r)!=="EN_ATTENTE"||!confirm("Annuler cette demande ?"))return;await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});await syncRequestToCockpit(id);await load()}
+async function cancelReq(id){
+  const r=S.myRequests.find(x=>x.id===id);
+  if(!r)return;
+  if(!canCancel(r)){
+    alert("Cette demande ne peut plus être annulée : sa date de début est passée ou son statut est clôturé.");
+    return;
+  }
+  const period=dt(F(r,"Date_Debut"))===dt(F(r,"Date_Fin"))?dt(F(r,"Date_Debut")):`du ${dt(F(r,"Date_Debut"))} au ${dt(F(r,"Date_Fin"))}`;
+  if(!confirm(`Annuler cette demande ?\n\n${motifName(rid(F(r,"Motif")))} — ${period}\n\nL'annulation sera transmise au Cockpit RH.`))return;
+  await grist.getTable(T.requests).update({id,fields:{Statut:"ANNULEE",Date_Modification:Math.floor(Date.now()/1000)}});
+  await syncRequestToCockpit(id);
+  await load();
+}
 function msg(t){$("msg").textContent=t;$("msg").classList.remove("hidden")}
 function fatal(e){
   const message=e?.message||String(e);
@@ -958,6 +987,7 @@ async function boot(){
   $("addManagerLink").onclick=()=>addManagerLink().catch(managerAdminError);
   $("labelsSearch").oninput=e=>renderLabelsManager(e.target.value);
   $("resetAllLabels").onclick=()=>resetAllLabels().catch(fatal);
+  if($("initMenuOrderBtn")) $("initMenuOrderBtn").onclick=()=>initMenuOrderTable().catch(fatal);
   $("save").onclick=()=>save().catch(fatal);
   $("newBtn").onclick=()=>{reset();showView("new")};
   $("cancelEdit").onclick=()=>{reset();showView("mine")};
@@ -977,7 +1007,7 @@ async function boot(){
   await syncAll("startup")
   await identify();
   await detectOwner();
-  await load();await loadLabels();showView("home");
+  await load();await loadLabels();await loadMenuOrder();showView("home");
   setTimeout(()=>loadManagerContext().catch(e=>console.warn("Mode manager:",e)),0);
 }
 boot().catch(fatal);
@@ -1015,7 +1045,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","planning","all"],
-    admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","sync"]
+    admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","sync"]
   };
 
   const applyAccordion = (open) => {

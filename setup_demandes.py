@@ -27,6 +27,9 @@ schemas={
  {"id":"Email","fields":{"type":"Text"}},{"id":"Nom","fields":{"type":"Text"}},
  {"id":"Role","fields":{"type":"Text"}},{"id":"Actif","fields":{"type":"Bool"}}],
 
+
+"PARAM_MENU_ORDRE":[
+ {"id":"View","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},{"id":"Ordre","fields":{"type":"Int"}}],
 "PLANNING_PRESENCE":[
  {"id":"Ressource","fields":{"type":"Ref:Ressources"}},{"id":"Date","fields":{"type":"Date"}},
  {"id":"Statut","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},
@@ -68,4 +71,4 @@ if owner:
     print("Owner bootstrap configuré:",owner)
 else:
     print("OWNER_EMAIL non défini : table ADMIN_PORTAIL créée, mais aucun Owner bootstrap ajouté.")
-print("SETUP V1.54 OK")
+print("SETUP V1.58 OK")

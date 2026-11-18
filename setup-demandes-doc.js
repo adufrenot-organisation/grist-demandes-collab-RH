@@ -47,6 +47,11 @@ const schemas={
     {id:"Actif",fields:{type:"Bool"}},
     {id:"Description",fields:{type:"Text"}}
   ],
+  PARAM_MENU_ORDRE:[
+    {id:"View",fields:{type:"Text"}},
+    {id:"Libelle",fields:{type:"Text"}},
+    {id:"Ordre",fields:{type:"Int"}}
+  ],
   PLANNING_PRESENCE:[
     {id:"Ressource",fields:{type:"Ref:Ressources"}},
     {id:"Date",fields:{type:"Date"}},
