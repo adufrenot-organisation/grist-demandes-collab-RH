@@ -1,4 +1,4 @@
-const VERSION="V1.59";
+const VERSION="V1.60";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -323,6 +323,104 @@ function applyLabels(root=document){
   });
 
 }
+
+// V1.60 — ordre administrable des menus Administration
+const MENU_ORDER_DEFS=[
+  ["resources","Ressources"],
+  ["managers","Managers & Ressources"],
+  ["motifs","Motifs RH"],
+  ["presenceMap","Correspondance présence"],
+  ["acl","ACL & Permissions"],
+  ["debug","Diagnostic"],
+  ["labels","Libellés de l’application"],
+  ["menuOrder","Ordre des menus"]
+];
+
+async function menuOrderTableExists(){
+  try{await grist.docApi.fetchTable(T.menuOrder);return true}catch{return false}
+}
+function effectiveMenuOrder(){
+  const byView=Object.fromEntries((S.menuOrder||[]).map(r=>[norm(F(r,"View")),Number(F(r,"Ordre"))||9999]));
+  return MENU_ORDER_DEFS.map(([view,label],idx)=>({view,label,ordre:byView[view]??((idx+1)*10)}))
+    .sort((a,b)=>a.ordre-b.ordre||a.label.localeCompare(b.label,"fr"));
+}
+function applyMenuOrder(){
+  const admin=$('adminNav');
+  if(!admin)return;
+  const buttons=[...admin.querySelectorAll('.accordion-admin.nav[data-view]')];
+  if(!buttons.length)return;
+  const rank=Object.fromEntries(effectiveMenuOrder().map((x,i)=>[x.view,i]));
+  buttons.sort((a,b)=>(rank[a.dataset.view]??9999)-(rank[b.dataset.view]??9999));
+  buttons.forEach(b=>admin.appendChild(b));
+}
+async function loadMenuOrder(){
+  if(!(S.isAdmin||S.isOwner))return;
+  const exists=await menuOrderTableExists();
+  S.menuOrderReady=exists;
+  S.menuOrder=exists?await table(T.menuOrder):[];
+  applyMenuOrder();
+  const setup=$('menuOrderSetupText');
+  if(setup) setup.innerHTML=exists
+    ? `<strong>PARAM_MENU_ORDRE</strong> est disponible · ${S.menuOrder.length} entrée(s) enregistrée(s).`
+    : `<strong>PARAM_MENU_ORDRE</strong> n’existe pas encore. Cliquez sur « Initialiser / compléter la table ».`;
+  const btn=$('initMenuOrderBtn');
+  if(btn) btn.textContent=exists?'Compléter / vérifier la table':'Initialiser la table';
+  $('menuOrderManager')?.classList.toggle('hidden',!exists);
+  if(exists)renderMenuOrderManager();
+}
+async function initMenuOrderTable(){
+  if(!(S.isAdmin||S.isOwner))return;
+  const btn=$('initMenuOrderBtn');
+  const old=btn?.textContent;
+  if(btn){btn.disabled=true;btn.textContent='Initialisation…';}
+  try{
+    if(!await menuOrderTableExists()){
+      await grist.docApi.applyUserActions([["AddTable",T.menuOrder,[
+        {id:"View",type:"Text"},{id:"Libelle",type:"Text"},{id:"Ordre",type:"Int"}
+      ]]]);
+    }
+    const existing=await table(T.menuOrder);
+    const views=new Set(existing.map(r=>norm(F(r,"View"))));
+    const actions=MENU_ORDER_DEFS.filter(([view])=>!views.has(view)).map(([view,label],idx)=>["AddRecord",T.menuOrder,null,{View:view,Libelle:label,Ordre:(idx+1)*10}]);
+    if(actions.length)await grist.docApi.applyUserActions(actions);
+    await loadMenuOrder();
+    showMenuOrderMsg('Ordre des menus initialisé et vérifié.','success');
+  }catch(e){
+    showMenuOrderMsg('Impossible d’initialiser PARAM_MENU_ORDRE : '+(e?.message||String(e)),'danger');
+    throw e;
+  }finally{
+    if(btn){btn.disabled=false;if(btn.textContent==='Initialisation…')btn.textContent=old||'Initialiser / compléter la table';}
+  }
+}
+function showMenuOrderMsg(text,type='success'){
+  const el=$('menuOrderMsg');if(!el)return;
+  el.textContent=text;el.classList.remove('hidden','success','danger');el.classList.add(type);
+}
+function renderMenuOrderManager(){
+  const body=$('menuOrderRows');if(!body||!S.menuOrderReady)return;
+  const rows=effectiveMenuOrder();
+  body.innerHTML=rows.map((x,i)=>`<tr><td><strong>${i+1}</strong></td><td>${esc(L('nav.'+x.view,x.label))}</td><td><span class="codechip">${esc(x.view)}</span></td><td><div class="label-actions"><button class="table-action" data-menu-up="${esc(x.view)}" ${i===0?'disabled':''}>↑</button><button class="table-action" data-menu-down="${esc(x.view)}" ${i===rows.length-1?'disabled':''}>↓</button></div></td></tr>`).join('');
+  body.querySelectorAll('[data-menu-up]').forEach(b=>b.onclick=()=>moveMenuOrder(b.dataset.menuUp,-1).catch(fatal));
+  body.querySelectorAll('[data-menu-down]').forEach(b=>b.onclick=()=>moveMenuOrder(b.dataset.menuDown,1).catch(fatal));
+}
+async function moveMenuOrder(view,delta){
+  if(!(S.isAdmin||S.isOwner))return;
+  if(!S.menuOrderReady){await initMenuOrderTable();}
+  const ordered=effectiveMenuOrder();
+  const i=ordered.findIndex(x=>x.view===view);
+  const j=i+delta;
+  if(i<0||j<0||j>=ordered.length)return;
+  const byView=Object.fromEntries((S.menuOrder||[]).map(r=>[norm(F(r,"View")),r]));
+  const a=byView[ordered[i].view], b=byView[ordered[j].view];
+  if(!a||!b){await initMenuOrderTable();return moveMenuOrder(view,delta);}
+  const ta=Number(F(a,"Ordre"))||((i+1)*10), tb=Number(F(b,"Ordre"))||((j+1)*10);
+  const t=grist.getTable(T.menuOrder);
+  await t.update({id:a.id,fields:{Ordre:tb}});
+  await t.update({id:b.id,fields:{Ordre:ta}});
+  await loadMenuOrder();
+  showMenuOrderMsg('Ordre enregistré.','success');
+}
+
 async function labelsTableExists(){
   try{await grist.docApi.fetchTable(T.labels);return true}catch{return false}
 }
