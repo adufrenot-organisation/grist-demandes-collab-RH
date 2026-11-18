@@ -1,4 +1,4 @@
-const VERSION="V1.64";
+const VERSION="V1.65";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -979,9 +979,16 @@ function renderPlanning(){
     const cells=dates.map(d=>{
       const row=byResource.get(id)?.get(d);const h=frenchDayHeader(d);const display=planningDisplayForRow(row);
       const forecastRequests=forecastByResource.get(id)?.get(d)||[];
-      const code=forecastRequests.length?"AP":display.code;
+      const showWorked=$("planningShowWorked")?.checked!==false;
+      const showAbsence=$("planningShowAbsence")?.checked!==false;
+      const showForecast=$("planningShowForecast")?.checked!==false;
+      let code="";
+      let usingForecast=false;
+      if(forecastRequests.length&&showForecast){code="AP";usingForecast=true;}
+      else if(display.code==="P"&&showWorked)code="P";
+      else if(display.code==="A"&&showAbsence)code="A";
       let title="Aucune donnée synchronisée";
-      if(forecastRequests.length){
+      if(usingForecast){
         if(isOwnRow){
           const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");
           title=`Absence prévisionnelle · ${details}`;
@@ -995,7 +1002,7 @@ function renderPlanning(){
           title=code?display.reason:"Aucune information de présence affichable";
         }
       }
-      return `<td class="planning-cell ${h.weekend?"weekend":""} ${forecastRequests.length?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}">${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;
+      return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}">${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;
     }).join("");
     return `<tr><td class="sticky-col resource-col"><div class="resource-name"><span class="resource-avatar">${esc(initials||"R")}</span><strong>${esc(name)}</strong></div></td><td class="sticky-col team-col" title="${esc(teamName)}">${esc(teamName)}</td>${cells}</tr>`;
   }).join(""):`<tr><td colspan="17" class="planning-empty">Aucune présence synchronisée sur cette période.</td></tr>`;
@@ -1309,6 +1316,9 @@ async function boot(){
   if($("initPlanningBtn")) $("initPlanningBtn").onclick=()=>initPlanningTable().catch(showPlanningError);
   if($("planningSearch")) $("planningSearch").oninput=()=>renderPlanning();
   if($("planningTeam")) $("planningTeam").onchange=()=>renderPlanning();
+  if($("planningShowWorked")) $("planningShowWorked").onchange=()=>renderPlanning();
+  if($("planningShowAbsence")) $("planningShowAbsence").onchange=()=>renderPlanning();
+  if($("planningShowForecast")) $("planningShowForecast").onchange=()=>renderPlanning();
   if($("planningStartDate")) $("planningStartDate").onchange=e=>setPlanningStartDate(e.target.value);
   if($("planningPrev")) $("planningPrev").onclick=()=>shiftPlanning(-15);
   if($("planningNext")) $("planningNext").onclick=()=>shiftPlanning(15);
