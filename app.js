@@ -1,4 +1,4 @@
-const VERSION="V1.62";
+const VERSION="V1.63";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -880,6 +880,7 @@ function renderPlanning(){
   if(init)init.classList.toggle("hidden",!S.isOwner);
   if(!S.planningReady){const st=$("planningSetupText");if(st)st.innerHTML=`La table <strong>${esc(T.planning)}</strong> n'existe pas encore dans le document Demande RH.`;return}
   const start=S.planningStart||localIsoToday(), dates=Array.from({length:15},(_,i)=>addDaysIso(start,i)), end=dates[14];
+  const startInput=$("planningStartDate");if(startInput&&startInput.value!==start)startInput.value=start;
   const range=$("planningRange");if(range)range.textContent=`${frenchDateShort(start)} – ${frenchDateShort(end)} ${end.slice(0,4)}`;
   const q=norm($("planningSearch")?.value).toLowerCase();
   const canSeeAllTeams=!!(S.isAdmin||S.isOwner);
@@ -938,6 +939,12 @@ function renderPlanning(){
   const sync=$("planningSync");if(sync)sync.textContent=latest?`Synchronisé · ${new Date(latest*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:"En attente de synchronisation";
 }
 function shiftPlanning(days){S.planningStart=addDaysIso(S.planningStart||localIsoToday(),days);renderPlanning()}
+function setPlanningStartDate(value){
+  const v=norm(value);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return;
+  S.planningStart=v;
+  renderPlanning();
+}
 function resetPlanningToday(){S.planningStart=localIsoToday();renderPlanning()}
 
 // V1.52 — correspondance Motifs RH -> impact feuille de présence
@@ -1238,6 +1245,7 @@ async function boot(){
   if($("initPlanningBtn")) $("initPlanningBtn").onclick=()=>initPlanningTable().catch(showPlanningError);
   if($("planningSearch")) $("planningSearch").oninput=()=>renderPlanning();
   if($("planningTeam")) $("planningTeam").onchange=()=>renderPlanning();
+  if($("planningStartDate")) $("planningStartDate").onchange=e=>setPlanningStartDate(e.target.value);
   if($("planningPrev")) $("planningPrev").onclick=()=>shiftPlanning(-15);
   if($("planningNext")) $("planningNext").onclick=()=>shiftPlanning(15);
   if($("planningToday")) $("planningToday").onclick=()=>resetPlanningToday();
