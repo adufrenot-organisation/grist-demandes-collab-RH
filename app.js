@@ -1,6 +1,6 @@
-const VERSION="V1.51";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[]};
+const VERSION="V1.52";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE"};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 const DEBUG_KEY="rh_debug_enabled";
 function debugIsEnabled(){
@@ -255,11 +255,11 @@ function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Co
 // V1.29 — libellés administrables localement dans Grist
 const LABEL_DEFS=[
  ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.all","Menu","Autres demandes"],
- ["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.motifs","Menu","Motifs RH"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
+ ["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.motifs","Menu","Motifs RH"],["nav.presenceMap","Menu","Correspondance présence"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
  ["section.space","Menu","MON ESPACE"],["section.admin","Menu","ADMINISTRATION"],
  ["brand.title","En-tête","Demandes RH"],["brand.subtitle","En-tête","Portail collaborateur"],["header.eyebrow","En-tête","ESPACE RH"],
  ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.all","Pages","Autres demandes"],
- ["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.motifs","Pages","Motifs RH"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
+ ["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
  ["home.pill","Accueil","Portail collaborateur"],["home.hero","Accueil","Gérez vos demandes simplement."],
  ["mine.pill","Mes demandes","SUIVI"],["mine.title","Mes demandes","Mes demandes"],["mine.subtitle","Mes demandes","Historique et état de traitement."],
  ["all.pill","Autres demandes","ADMIN"],["all.title","Autres demandes","Autres demandes"],
@@ -303,7 +303,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",acl:"nav.acl",labels:"nav.labels"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -534,7 +534,7 @@ function setViewAs(id){
 
 function showView(name){
   if(S.viewAs && name==="new")return;
-  if(["resources","motifs","acl","sync"].includes(name)&&!S.isOwner)return;
+  if(["resources","motifs","presenceMap","acl","sync"].includes(name)&&!S.isOwner)return;
   if(name==="managers"&&!(S.isAdmin||S.isOwner))return;
   if(name==="labels"&&!(S.isAdmin||S.isOwner))return;
   if(name==="all"&&!(S.isAdmin||S.isOwner))return;
@@ -542,7 +542,8 @@ function showView(name){
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"]};
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"]};
+  if(name==="presenceMap")setTimeout(()=>renderPresenceMapAdmin().catch(showPresenceMapError),0);
   const t=titles[name];
   const pageTitle=$("pageTitle");
   if(pageTitle){
@@ -622,6 +623,80 @@ async function saveAdminMotif(){
     $("motifAdminMsg").classList.remove("hidden");
   }
 }
+
+// V1.52 — correspondance Motifs RH -> impact feuille de présence
+async function presenceMapTableExists(){
+  try{await grist.docApi.fetchTable(T.presenceMap);return true}catch{return false}
+}
+async function ensurePresenceMapTable(){
+  if(await presenceMapTableExists())return true;
+  if(!S.isOwner)throw new Error("Seul l’Owner peut initialiser la table de correspondance présence.");
+  await grist.docApi.applyUserActions([["AddTable",T.presenceMap,[
+    {id:"Motif",type:"Ref:Motifs_RH",label:"Motif RH"},
+    {id:"Type_Presence",type:"Text",label:"Type de présence"},
+    {id:"Actif",type:"Bool",label:"Actif"},
+    {id:"Commentaire",type:"Text",label:"Commentaire"}
+  ]]]);
+  return true;
+}
+async function loadPresenceMappings(){
+  if(!(await presenceMapTableExists())){
+    S.presenceMappings=[];S.presenceMapReady=false;return false;
+  }
+  S.presenceMappings=rows(await grist.docApi.fetchTable(T.presenceMap));
+  S.presenceMapReady=true;return true;
+}
+function presenceTypeLabel(v){
+  return ({JOUR_TRAVAILLE:"Jour travaillé",ABSENCE:"Absence",AUCUN_IMPACT:"Aucun impact"})[norm(v).toUpperCase()]||"Non configuré";
+}
+async function renderPresenceMapAdmin(){
+  if(!S.isOwner)return;
+  const exists=await loadPresenceMappings();
+  const setup=$("presenceMapSetup"), manager=$("presenceMapManager"), state=$("presenceMapSetupText");
+  if(setup)setup.classList.toggle("hidden",exists);
+  if(manager)manager.classList.toggle("hidden",!exists);
+  if(state)state.innerHTML=exists?`<strong>${esc(T.presenceMap)}</strong> est disponible · ${S.presenceMappings.length} correspondance(s).`:`<strong>${esc(T.presenceMap)}</strong> n’existe pas encore.`;
+  if(!exists)return;
+  const byMotif=new Map(S.presenceMappings.map(r=>[rid(F(r,"Motif")),r]));
+  const body=$("presenceMapRows"); if(!body)return;
+  body.innerHTML=(S.motifs||[]).map(m=>{
+    const r=byMotif.get(Number(m.id));
+    const type=norm(F(r,"Type_Presence")).toUpperCase();
+    const actif=r?F(r,"Actif")!==false:true;
+    const comment=r?norm(F(r,"Commentaire")):"";
+    const opts=[["","— Non configuré —"],["JOUR_TRAVAILLE","Jour travaillé"],["ABSENCE","Absence"],["AUCUN_IMPACT","Aucun impact"]]
+      .map(([v,l])=>`<option value="${v}" ${type===v?"selected":""}>${l}</option>`).join("");
+    return `<tr><td><span class="codechip">${esc(F(m,"Code")||"—")}</span></td><td><strong>${esc(F(m,"Libelle")||"—")}</strong></td><td><select data-presence-type="${m.id}">${opts}</select></td><td><label class="toggleline"><input type="checkbox" data-presence-active="${m.id}" ${actif?"checked":""}> Actif</label></td><td><input data-presence-comment="${m.id}" value="${esc(comment)}" placeholder="Optionnel"></td><td><button class="table-action" data-presence-save="${m.id}">Enregistrer</button></td></tr>`;
+  }).join("")||'<tr><td colspan="6">Aucun motif RH à paramétrer.</td></tr>';
+  document.querySelectorAll("[data-presence-save]").forEach(b=>b.onclick=()=>savePresenceMapping(Number(b.dataset.presenceSave)).catch(showPresenceMapError));
+}
+function showPresenceMapError(e){
+  const el=$("presenceMapMsg");if(!el)return;el.textContent=e?.message||String(e);el.className="alert danger";el.classList.remove("hidden");
+}
+function showPresenceMapSuccess(text){
+  const el=$("presenceMapMsg");if(!el)return;el.textContent=text;el.className="alert success";el.classList.remove("hidden");setTimeout(()=>el.classList.add("hidden"),2200);
+}
+async function initPresenceMapTable(){
+  await ensurePresenceMapTable();await renderPresenceMapAdmin();showPresenceMapSuccess("Table de correspondance initialisée.");
+}
+async function savePresenceMapping(motifId){
+  if(!S.isOwner)return;
+  const type=norm(document.querySelector(`[data-presence-type="${motifId}"]`)?.value).toUpperCase();
+  if(!["JOUR_TRAVAILLE","ABSENCE","AUCUN_IMPACT"].includes(type))throw new Error("Choisissez Jour travaillé, Absence ou Aucun impact.");
+  const actif=!!document.querySelector(`[data-presence-active="${motifId}"]`)?.checked;
+  const commentaire=norm(document.querySelector(`[data-presence-comment="${motifId}"]`)?.value);
+  await ensurePresenceMapTable();await loadPresenceMappings();
+  const old=S.presenceMappings.find(r=>rid(F(r,"Motif"))===Number(motifId));
+  const fields={Motif:Number(motifId),Type_Presence:type,Actif:actif,Commentaire:commentaire};
+  if(old)await grist.getTable(T.presenceMap).update({id:old.id,fields});
+  else await grist.getTable(T.presenceMap).create({fields});
+  await renderPresenceMapAdmin();showPresenceMapSuccess(`Correspondance enregistrée : ${presenceTypeLabel(type)}.`);
+}
+function presenceTypeForMotif(motifId){
+  const r=(S.presenceMappings||[]).find(x=>rid(F(x,"Motif"))===Number(motifId)&&F(x,"Actif")!==false);
+  return r?norm(F(r,"Type_Presence")).toUpperCase():"";
+}
+
 async function adminSyncResources(){
   if(!S.isOwner)return;
   try{await load();showView("resources")}catch(e){fatal(e)}
@@ -699,6 +774,8 @@ async function boot(){
   if($("copyDebugBtn")) $("copyDebugBtn").onclick=async()=>{try{await navigator.clipboard.writeText($("debugOutput")?.textContent||"");$("copyDebugBtn").textContent="Copié ✓";setTimeout(()=>$("copyDebugBtn").textContent="Copier le diagnostic",1200)}catch(e){dlog("debug.copy.error",{message:e?.message||String(e)})}};
   if($("fatalDebugBtn")) $("fatalDebugBtn").onclick=()=>{setDebugEnabled(true);showDebugFromFatal()};
   $("newMotifBtn").onclick=()=>openMotifEditor();
+  if($("initPresenceMapBtn")) $("initPresenceMapBtn").onclick=()=>initPresenceMapTable().catch(showPresenceMapError);
+  if($("refreshPresenceMapBtn")) $("refreshPresenceMapBtn").onclick=()=>renderPresenceMapAdmin().catch(showPresenceMapError);
   $("closeMotif").onclick=closeMotifEditor;
   $("cancelMotif").onclick=closeMotifEditor;
   $("saveMotif").onclick=()=>saveAdminMotif().catch(fatal);
@@ -757,7 +834,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","all"],
-    admin: ["resources","managers","motifs","acl","labels","debug","sync"]
+    admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","sync"]
   };
 
   const applyAccordion = (open) => {

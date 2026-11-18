@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.51</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.52</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.51</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.52</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -18,6 +18,7 @@
     <button class="accordion-item accordion-admin nav owner-only" data-view="resources">♙ <span>Ressources</span></button>
     <button class="accordion-item accordion-admin nav manager-admin-only" data-view="managers">♧ <span>Managers & Ressources</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="motifs">◇ <span>Motifs RH</span></button>
+    <button class="accordion-item accordion-admin nav owner-only" data-view="presenceMap">↔ <span>Correspondance présence</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="acl">◈ <span>ACL & Permissions</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="debug">⌁ <span>Diagnostic</span></button>
     <button class="accordion-item accordion-admin nav" data-view="labels">✎ <span>Libellés de l’application</span></button>
@@ -83,6 +84,19 @@
 <div id="motifEditor" class="modal hidden"><div class="modalbox"><div class="modalhead"><div><span class="pill adminpill">MOTIF RH</span><h3 id="motifEditorTitle">Nouveau motif</h3></div><button id="closeMotif" class="iconbtn">×</button></div>
 <div class="formgrid"><label>Code<input id="motifCodeAdmin" maxlength="40" placeholder="Ex. CP"></label><label>Libellé<input id="motifLabelAdmin" maxlength="120" placeholder="Ex. Congés payés"></label><label class="wide">Description<textarea id="motifDescAdmin" rows="4"></textarea></label><label class="toggleline wide"><input id="motifActiveAdmin" type="checkbox" checked> Motif actif</label></div>
 <div id="motifAdminMsg" class="alert hidden"></div><div class="actions"><button id="cancelMotif" class="secondary">Annuler</button><button id="saveMotif" class="primary">Enregistrer</button></div></div></div>
+</section>
+
+<section id="view-presenceMap" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">PARAMÉTRAGE</span><h2>Correspondance présence</h2><p>Associez chaque motif RH à son impact sur la feuille de présence.</p></div><button id="refreshPresenceMapBtn" class="secondary">↻ Actualiser</button></div>
+ <div id="presenceMapSetup" class="card">
+  <div class="section-head"><div><h3>Table de correspondance</h3><p id="presenceMapSetupText">Vérification de <strong>PARAM_MOTIFS_PRESENCE</strong>…</p></div><button id="initPresenceMapBtn" class="primary">Initialiser / compléter la table</button></div>
+  <div class="setup-hint">La correspondance est locale au portail. Un motif non configuré ne doit provoquer aucune mise à jour automatique de présence.</div>
+ </div>
+ <div id="presenceMapManager" class="card hidden">
+  <div class="section-head"><div><h3>Motifs RH et impact présence</h3><p>Valeurs possibles : Jour travaillé, Absence ou Aucun impact.</p></div></div>
+  <div id="presenceMapMsg" class="alert hidden"></div>
+  <div class="tablewrap"><table><thead><tr><th>Code</th><th>Motif RH</th><th>Impact présence</th><th>État</th><th>Commentaire</th><th></th></tr></thead><tbody id="presenceMapRows"></tbody></table></div>
+ </div>
 </section>
 
 <section id="view-labels" class="view adminview">
