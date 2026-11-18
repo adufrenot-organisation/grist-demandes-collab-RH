@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.65</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.66</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.65</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.66</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -24,6 +24,8 @@
     <button class="accordion-item accordion-admin nav owner-only" data-view="debug">⌁ <span>Diagnostic</span></button>
     <button class="accordion-item accordion-admin nav" data-view="labels">✎ <span>Libellés de l’application</span></button>
     <button class="accordion-item accordion-admin nav" data-view="menuOrder">↕ <span>Ordre des menus</span></button>
+    <button class="accordion-item accordion-admin nav" data-view="syncParams">⚙ <span>Paramètres de synchro</span></button>
+    <button class="accordion-item accordion-admin nav" data-view="syncRequests">↻ <span>Demandes de synchro</span></button>
     
   </div>
   <div class="syncmini" id="syncMini">
@@ -160,6 +162,23 @@
   <div class="section-head"><div><h3>Journal technique</h3><p id="debugStatus">Inactif</p></div><label class="debug-toggle"><input id="debugToggle" type="checkbox"> Activer le mode debug</label></div>
   <div class="debug-actions"><button id="copyDebugBtn" class="secondary" type="button">Copier le diagnostic</button></div>
   <pre id="debugOutput" class="debug-pre"></pre>
+ </div>
+</section>
+
+<section id="view-syncParams" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">SYNCHRONISATION</span><h2>Paramètres de synchro</h2><p>Gérez les paramètres lus par le service RH-SYNC.</p></div></div>
+ <div id="syncParamsMsg" class="alert hidden"></div>
+ <div id="syncParamsSetup" class="card"><div class="section-head"><div><h3>Table PARAM_SYNCHRO</h3><p id="syncParamsSetupText">Vérification…</p></div><button id="initSyncParamsBtn" class="primary">Initialiser la table</button></div></div>
+ <div id="syncParamsManager" class="card hidden"><div class="section-head"><div><h3>Paramètres</h3><p>Modifiez uniquement la valeur. La clé reste stable pour le moteur de synchro.</p></div><button id="refreshSyncParamsBtn" class="secondary">Actualiser</button></div><div class="tablewrap"><table><thead><tr><th>Clé</th><th>Valeur</th><th>Commentaire</th><th></th></tr></thead><tbody id="syncParamsRows"></tbody></table></div></div>
+</section>
+
+<section id="view-syncRequests" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">SYNCHRONISATION</span><h2>Demandes de synchro</h2><p>Demandez une resynchronisation du planning sur une période donnée et suivez son exécution.</p></div></div>
+ <div id="syncRequestsMsg" class="alert hidden"></div>
+ <div id="syncRequestsSetup" class="card"><div class="section-head"><div><h3>Table DEMANDES_SYNCHRO</h3><p id="syncRequestsSetupText">Vérification…</p></div><button id="initSyncRequestsBtn" class="primary">Initialiser la table</button></div></div>
+ <div id="syncRequestsManager" class="hidden">
+  <div class="card formcard"><div class="section-head"><div><h3>Nouvelle demande de synchro</h3><p>Le service RH-SYNC prendra en charge les lignes au statut EN_ATTENTE.</p></div><button id="syncCurrentYearBtn" class="secondary">Toute l’année en cours</button></div><div class="formgrid"><label>Date de début<input id="syncReqStart" type="date"></label><label>Date de fin<input id="syncReqEnd" type="date"></label><label>Mode<select id="syncReqFull"><option value="true">Complète / Force_Full</option><option value="false">Mise à jour standard</option></select></label></div><div class="actions"><button id="createSyncRequestBtn" class="primary">Demander la synchronisation</button></div></div>
+  <div class="card"><div class="section-head"><div><h3>Historique</h3><p>Dernières demandes déposées dans DEMANDES_SYNCHRO.</p></div><button id="refreshSyncRequestsBtn" class="secondary">Actualiser</button></div><div class="tablewrap"><table><thead><tr><th>Demandée le</th><th>Période</th><th>Type</th><th>Statut</th><th>Demandée par</th><th>Résultat</th></tr></thead><tbody id="syncRequestsRows"></tbody></table></div></div>
  </div>
 </section>
 

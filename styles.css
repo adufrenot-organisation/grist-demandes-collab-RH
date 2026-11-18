@@ -707,3 +707,8 @@ main > header.app-header .header-identity{
 
 /* V1.65 — filtres d’affichage du planning */
 .planning-display-filters{display:flex;align-items:center;justify-content:center;gap:10px;flex:1;flex-wrap:wrap}.planning-display-filters label{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:7px 10px;font-size:11px;font-weight:700;color:#536079;cursor:pointer;white-space:nowrap}.planning-display-filters input{width:15px;height:15px;margin:0;accent-color:#2563eb}.planning-display-filters label:has(input:not(:checked)){opacity:.55;background:#f7f9fc}.planning-display-filters span{display:inline-flex;align-items:center;gap:6px}.planning-toolbar .planning-legend{flex:0 1 auto}.planning-toolbar .planning-map-note{white-space:nowrap}@media(max-width:1100px){.planning-display-filters{order:3;flex-basis:100%;justify-content:flex-start}.planning-toolbar .planning-legend{order:4;flex-basis:100%;justify-content:flex-start}}
+
+/* V1.66 — administration de la synchronisation */
+.sync-param-input{min-width:180px;width:100%;max-width:360px;padding:9px 10px;border:1px solid var(--border,#d7dce5);border-radius:8px;background:#fff;color:inherit}
+#view-syncRequests .formgrid{align-items:end}
+#view-syncRequests .state.busy{background:#fff4d6;color:#805b00}

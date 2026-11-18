@@ -1,6 +1,6 @@
-const VERSION="V1.65";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false};
+const VERSION="V1.66";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO"};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 const DEBUG_KEY="rh_debug_enabled";
 function debugIsEnabled(){
@@ -293,7 +293,7 @@ const LABEL_DEFS=[
  ["acl.pill","ACL","SECURITY CENTER"],["acl.title","ACL","ACL & Permissions"],["acl.audit","ACL","Audit des permissions"],
  ["motifs.pill","Motifs","RÉFÉRENTIEL LOCAL"],["motifs.new","Motifs","Nouveau motif"],["motifs.active","Motifs","Motif actif"],
  ["resources.title","Ressources","Ressources"],
- ["nav.managers","Menu","Managers & Ressources"],["page.managers","Pages","Managers & Ressources"],["nav.menuOrder","Menu","Ordre des menus"],["page.menuOrder","Pages","Ordre des menus"],];
+ ["nav.managers","Menu","Managers & Ressources"],["page.managers","Pages","Managers & Ressources"],["nav.menuOrder","Menu","Ordre des menus"],["page.menuOrder","Pages","Ordre des menus"],["nav.syncParams","Menu","Paramètres de synchro"],["page.syncParams","Pages","Paramètres de synchro"],["nav.syncRequests","Menu","Demandes de synchro"],["page.syncRequests","Pages","Demandes de synchro"],];
 const LABEL_BY_DEFAULT=Object.fromEntries(LABEL_DEFS.map(([k,c,d])=>[d,k]));
 function labelMap(){return Object.fromEntries((S.labels||[]).map(r=>[norm(F(r,"Cle")),norm(F(r,"Libelle"))]).filter(([k,v])=>k&&v))}
 function L(key,fallback=""){return labelMap()[key]||fallback||LABEL_DEFS.find(x=>x[0]===key)?.[2]||key}
@@ -319,7 +319,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder",syncParams:"nav.syncParams",syncRequests:"nav.syncRequests"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -351,7 +351,9 @@ const MENU_ORDER_DEFS={
     ["acl","ACL & Permissions"],
     ["debug","Diagnostic"],
     ["labels","Libellés de l’application"],
-    ["menuOrder","Ordre des menus"]
+    ["menuOrder","Ordre des menus"],
+    ["syncParams","Paramètres de synchro"],
+    ["syncRequests","Demandes de synchro"]
   ]
 };
 
@@ -489,6 +491,65 @@ async function moveMenuOrder(section,view,delta){
   await t.update({id:b.id,fields:{Ordre:ta}});
   await loadMenuOrder();
   showMenuOrderMsg('Ordre enregistré.','success');
+}
+
+// V1.66 — administration des paramètres et demandes de synchronisation
+function showSyncAdminMsg(id,text,type='success'){
+  const el=$(id);if(!el)return;el.textContent=text;el.classList.remove('hidden','success','danger');el.classList.add(type);
+}
+async function gristTableExists(name){try{await grist.docApi.fetchTable(name);return true}catch{return false}}
+function frDateTime(v){if(!v)return '—';const d=new Date(Number(v)*1000);return Number.isNaN(d.getTime())?'—':d.toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})}
+function frDate(v){if(!v)return '—';const d=new Date(Number(v)*1000);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('fr-FR')}
+async function initSyncParamsTable(){
+  if(!(S.isAdmin||S.isOwner))return;
+  if(!await gristTableExists(T.syncParams)){
+    await grist.docApi.applyUserActions([["AddTable",T.syncParams,[{id:"Cle",type:"Text"},{id:"Valeur",type:"Text"},{id:"Commentaire",type:"Text"}]]]);
+  }
+  const existing=await table(T.syncParams), keys=new Set(existing.map(r=>norm(F(r,'Cle'))));
+  const defs=[
+    ['SYNC_HEBDO_ACTIF','true','Active la synchronisation hebdomadaire'],
+    ['SYNC_HEBDO_JOUR','DIMANCHE','Jour de la synchronisation complète'],
+    ['SYNC_HEBDO_HEURE','22:00','Heure de lancement'],
+    ['SYNC_HEBDO_PERIODE','ANNEE_EN_COURS','Période de la synchronisation complète'],
+    ['SYNC_AUTO_VALIDATION_ACTIF','true','Met à jour le planning après validation d’une demande']
+  ];
+  const actions=defs.filter(x=>!keys.has(x[0])).map(x=>["AddRecord",T.syncParams,null,{Cle:x[0],Valeur:x[1],Commentaire:x[2]}]);
+  if(actions.length)await grist.docApi.applyUserActions(actions);
+  await loadSyncParams();showSyncAdminMsg('syncParamsMsg','PARAM_SYNCHRO initialisée / complétée.');
+}
+async function loadSyncParams(){
+  if(!(S.isAdmin||S.isOwner))return;const exists=await gristTableExists(T.syncParams);S.syncParamsReady=exists;S.syncParams=exists?await table(T.syncParams):[];
+  $('syncParamsSetupText').innerHTML=exists?`<strong>PARAM_SYNCHRO</strong> disponible · ${S.syncParams.length} paramètre(s).`:`<strong>PARAM_SYNCHRO</strong> absente.`;
+  $('syncParamsManager')?.classList.toggle('hidden',!exists);if(exists)renderSyncParams();
+}
+function renderSyncParams(){
+  const body=$('syncParamsRows');if(!body)return;body.innerHTML=(S.syncParams||[]).sort((a,b)=>norm(F(a,'Cle')).localeCompare(norm(F(b,'Cle')))).map(r=>`<tr><td><span class="codechip">${esc(F(r,'Cle')||'')}</span></td><td><input class="sync-param-input" data-sync-param="${r.id}" value="${esc(F(r,'Valeur')||'')}"></td><td>${esc(F(r,'Commentaire')||'')}</td><td><button class="table-action" data-save-sync-param="${r.id}">Enregistrer</button></td></tr>`).join('');
+  body.querySelectorAll('[data-save-sync-param]').forEach(b=>b.onclick=()=>saveSyncParam(Number(b.dataset.saveSyncParam)).catch(e=>showSyncAdminMsg('syncParamsMsg',e?.message||String(e),'danger')));
+}
+async function saveSyncParam(id){
+  const input=document.querySelector(`[data-sync-param="${id}"]`);if(!input)return;await grist.getTable(T.syncParams).update({id,fields:{Valeur:input.value.trim()}});await loadSyncParams();showSyncAdminMsg('syncParamsMsg','Paramètre enregistré.');
+}
+async function initSyncRequestsTable(){
+  if(!(S.isAdmin||S.isOwner))return;
+  if(!await gristTableExists(T.syncRequests)){await grist.docApi.applyUserActions([["AddTable",T.syncRequests,[
+    {id:"Date_Debut",type:"Date"},{id:"Date_Fin",type:"Date"},{id:"Type_Synchro",type:"Text"},{id:"Statut",type:"Text"},{id:"Demandee_Par",type:"Text"},{id:"Date_Demande",type:"DateTime:UTC"},{id:"Date_Debut_Execution",type:"DateTime:UTC"},{id:"Date_Fin_Execution",type:"DateTime:UTC"},{id:"Nb_Lignes_Lues",type:"Int"},{id:"Nb_Lignes_Creees",type:"Int"},{id:"Nb_Lignes_MAJ",type:"Int"},{id:"Nb_Erreurs",type:"Int"},{id:"Message",type:"Text"},{id:"Force_Full",type:"Bool"}
+  ]] ]);}
+  await loadSyncRequests();showSyncAdminMsg('syncRequestsMsg','DEMANDES_SYNCHRO initialisée.');
+}
+async function loadSyncRequests(){
+  if(!(S.isAdmin||S.isOwner))return;const exists=await gristTableExists(T.syncRequests);S.syncRequestsReady=exists;S.syncRequests=exists?await table(T.syncRequests):[];
+  $('syncRequestsSetupText').innerHTML=exists?`<strong>DEMANDES_SYNCHRO</strong> disponible · ${S.syncRequests.length} demande(s).`:`<strong>DEMANDES_SYNCHRO</strong> absente.`;
+  $('syncRequestsManager')?.classList.toggle('hidden',!exists);if(exists)renderSyncRequests();
+}
+function renderSyncRequests(){
+  const body=$('syncRequestsRows');if(!body)return;const list=[...(S.syncRequests||[])].sort((a,b)=>Number(F(b,'Date_Demande')||0)-Number(F(a,'Date_Demande')||0)).slice(0,100);
+  body.innerHTML=list.length?list.map(r=>{const stt=norm(F(r,'Statut'))||'—';const cls=stt==='TERMINEE'?'ok':stt==='ERREUR'?'err':stt==='EN_COURS'?'busy':'off';const result=[F(r,'Nb_Lignes_Lues')!=null?`Lues ${Number(F(r,'Nb_Lignes_Lues')||0)}`:'',F(r,'Nb_Lignes_Creees')!=null?`Créées ${Number(F(r,'Nb_Lignes_Creees')||0)}`:'',F(r,'Nb_Lignes_MAJ')!=null?`MAJ ${Number(F(r,'Nb_Lignes_MAJ')||0)}`:'',F(r,'Nb_Erreurs')!=null?`Erreurs ${Number(F(r,'Nb_Erreurs')||0)}`:'',norm(F(r,'Message'))].filter(Boolean).join(' · ');return `<tr><td>${esc(frDateTime(F(r,'Date_Demande')))}</td><td>${esc(frDate(F(r,'Date_Debut')))} → ${esc(frDate(F(r,'Date_Fin')))}</td><td>${esc(F(r,'Type_Synchro')||'—')}${F(r,'Force_Full')?' · FULL':''}</td><td><span class="state ${cls}">${esc(stt)}</span></td><td>${esc(F(r,'Demandee_Par')||'—')}</td><td>${esc(result||'—')}</td></tr>`}).join(''):'<tr><td colspan="6">Aucune demande de synchronisation.</td></tr>';
+}
+function setSyncCurrentYear(){const y=new Date().getFullYear();$('syncReqStart').value=`${y}-01-01`;$('syncReqEnd').value=`${y}-12-31`;$('syncReqFull').value='true'}
+async function createSyncRequest(){
+  if(!(S.isAdmin||S.isOwner))return;if(!S.syncRequestsReady)await initSyncRequestsTable();const a=$('syncReqStart').value,b=$('syncReqEnd').value;if(!a||!b)throw new Error('Renseignez les dates de début et de fin.');if(a>b)throw new Error('La date de fin doit être postérieure à la date de début.');
+  const epoch=s=>Math.floor(new Date(`${s}T00:00:00`).getTime()/1000);const who=email(S.user?.email)||email(F(S.person,'Email'))||'ADMIN';await grist.getTable(T.syncRequests).create({fields:{Date_Debut:epoch(a),Date_Fin:epoch(b),Type_Synchro:'MANUELLE',Statut:'EN_ATTENTE',Demandee_Par:who,Date_Demande:Math.floor(Date.now()/1000),Force_Full:$('syncReqFull').value==='true'}});
+  await loadSyncRequests();showSyncAdminMsg('syncRequestsMsg','Demande déposée. Elle sera traitée par RH-SYNC dès que le moteur backend sera configuré pour consommer DEMANDES_SYNCHRO.');
 }
 
 async function labelsTableExists(){
@@ -712,14 +773,17 @@ function showView(name){
   if(name==="managers"&&!(S.isAdmin||S.isOwner))return;
   if(name==="labels"&&!(S.isAdmin||S.isOwner))return;
   if(name==="menuOrder"&&!(S.isAdmin||S.isOwner))return;
+  if(["syncParams","syncRequests"].includes(name)&&!(S.isAdmin||S.isOwner))return;
   if(name==="all"&&!(S.isAdmin||S.isOwner))return;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"]};
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"]};
   if(name==="presenceMap")setTimeout(()=>renderPresenceMapAdmin().catch(showPresenceMapError),0);
   if(name==="planning")setTimeout(()=>loadPlanning().catch(showPlanningError),0);
+  if(name==="syncParams")setTimeout(()=>loadSyncParams().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger")),0);
+  if(name==="syncRequests")setTimeout(()=>loadSyncRequests().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger")),0);
   const t=titles[name];
   const pageTitle=$("pageTitle");
   if(pageTitle){
@@ -1307,6 +1371,12 @@ async function boot(){
   $("labelsSearch").oninput=e=>renderLabelsManager(e.target.value);
   $("resetAllLabels").onclick=()=>resetAllLabels().catch(fatal);
   if($("initMenuOrderBtn")) $("initMenuOrderBtn").onclick=()=>initMenuOrderTable().catch(fatal);
+  if($("initSyncParamsBtn")) $("initSyncParamsBtn").onclick=()=>initSyncParamsTable().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger"));
+  if($("refreshSyncParamsBtn")) $("refreshSyncParamsBtn").onclick=()=>loadSyncParams().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger"));
+  if($("initSyncRequestsBtn")) $("initSyncRequestsBtn").onclick=()=>initSyncRequestsTable().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger"));
+  if($("refreshSyncRequestsBtn")) $("refreshSyncRequestsBtn").onclick=()=>loadSyncRequests().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger"));
+  if($("syncCurrentYearBtn")) $("syncCurrentYearBtn").onclick=()=>setSyncCurrentYear();
+  if($("createSyncRequestBtn")) $("createSyncRequestBtn").onclick=()=>createSyncRequest().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger"));
   $("save").onclick=()=>save().catch(fatal);
   $("newBtn").onclick=()=>{reset();showView("new")};
   $("cancelEdit").onclick=()=>{reset();showView("mine")};
@@ -1330,7 +1400,7 @@ async function boot(){
   await syncAll("startup")
   await identify();
   await detectOwner();
-  await load();await loadLabels();await loadMenuOrder();showView("home");
+  await load();await loadLabels();await loadMenuOrder();await loadSyncParams();await loadSyncRequests();showView("home");
   setTimeout(()=>loadManagerContext().catch(e=>console.warn("Mode manager:",e)),0);
 }
 boot().catch(fatal);
@@ -1368,7 +1438,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","planning","all"],
-    admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","sync"]
+    admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","syncParams","syncRequests","sync"]
   };
 
   const applyAccordion = (open) => {
