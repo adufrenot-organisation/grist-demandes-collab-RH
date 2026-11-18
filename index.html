@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.60</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.62</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.60</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.62</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -76,6 +76,11 @@
   <div class="tablewrap"><table><thead><tr><th>Ressource</th><th>Référence</th><th>Type</th><th>Date début</th><th>Date fin</th><th>Motif</th><th>Statut</th><th></th></tr></thead><tbody id="rowsAll"></tbody></table></div>
  </div>
 </section>
+<div id="cancelRequestModal" class="modal hidden"><div class="modalbox"><div class="modalhead"><div><span class="pill">ANNULATION</span><h3>Demander l’annulation</h3><p id="cancelRequestInfo" class="modal-subtitle"></p></div><button id="closeCancelRequest" class="iconbtn" type="button">×</button></div>
+<input id="cancelRequestOriginalId" type="hidden">
+<div class="formgrid"><label>Date de début à annuler<input id="cancelRequestStart" type="date"></label><label>Date de fin à annuler<input id="cancelRequestEnd" type="date"></label><label class="wide">Commentaire<textarea id="cancelRequestComment" rows="4" placeholder="Précisez si nécessaire la raison de l’annulation…"></textarea></label></div>
+<div id="cancelRequestMsg" class="alert hidden"></div><div class="actions"><button id="cancelCancelRequest" class="secondary" type="button">Fermer</button><button id="submitCancelRequest" class="primary" type="button">Envoyer la demande d’annulation</button></div></div></div>
+
 <section id="view-resources" class="view adminview">
 <div class="pagehead"><div><span class="pill adminpill">MASTER / SLAVE</span><h2>Ressources</h2><p>Référentiel en lecture seule, alimenté depuis Cockpit.Team.</p></div><button id="syncResourcesBtn" class="primary">↻ Rafraîchir</button></div>
 <div class="kpis admin-kpis"><div class="kpi"><small>RESSOURCES</small><strong id="resCount">0</strong><span>reçues</span></div><div class="kpi"><small>ACTIVES</small><strong id="resActive">0</strong><span>utilisables</span></div><div class="kpi"><small>ANOMALIES</small><strong id="resErrors">0</strong><span>à contrôler</span></div></div>
@@ -120,7 +125,10 @@
  <div class="pagehead"><div><span class="pill adminpill">PERSONNALISATION</span><h2>Ordre des menus</h2><p>Définissez l’ordre d’affichage des rubriques de la section Administration.</p></div></div>
  <div id="menuOrderSetup" class="card"><div class="section-head"><div><h3>Paramétrage</h3><p id="menuOrderSetupText">Vérification de <strong>PARAM_MENU_ORDRE</strong>…</p></div><button id="initMenuOrderBtn" class="primary">Initialiser / compléter la table</button></div></div>
  <div id="menuOrderMsg" class="alert hidden"></div>
- <div id="menuOrderManager" class="card hidden"><div class="section-head"><div><h3>Ordre des rubriques</h3><p>Utilisez les flèches pour déplacer une rubrique. L’ordre est enregistré dans Grist.</p></div></div><div class="tablewrap"><table><thead><tr><th>Position</th><th>Menu</th><th>Clé</th><th>Déplacer</th></tr></thead><tbody id="menuOrderRows"></tbody></table></div></div>
+ <div id="menuOrderManager" class="hidden">
+  <div class="card"><div class="section-head"><div><h3>Utilisateur / Mon espace</h3><p>Utilisez les flèches pour définir l’ordre des menus visibles dans la rubrique utilisateur.</p></div></div><div class="tablewrap"><table><thead><tr><th>Position</th><th>Menu</th><th>Clé</th><th>Déplacer</th></tr></thead><tbody id="menuOrderSpaceRows"></tbody></table></div></div>
+  <div class="card"><div class="section-head"><div><h3>Administration</h3><p>Ordre indépendant des menus de la rubrique Administration.</p></div></div><div class="tablewrap"><table><thead><tr><th>Position</th><th>Menu</th><th>Clé</th><th>Déplacer</th></tr></thead><tbody id="menuOrderAdminRows"></tbody></table></div></div>
+ </div>
 </section>
 
 <section id="view-labels" class="view adminview">

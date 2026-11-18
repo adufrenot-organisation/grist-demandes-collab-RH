@@ -29,7 +29,7 @@ schemas={
 
 
 "PARAM_MENU_ORDRE":[
- {"id":"View","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},{"id":"Ordre","fields":{"type":"Int"}}],
+ {"id":"Section","fields":{"type":"Text"}},{"id":"View","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},{"id":"Ordre","fields":{"type":"Int"}}],
 "PLANNING_PRESENCE":[
  {"id":"Ressource","fields":{"type":"Ref:Ressources"}},{"id":"Date","fields":{"type":"Date"}},
  {"id":"Statut","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},
@@ -38,7 +38,8 @@ schemas={
  {"id":"Erreur_Sync","fields":{"type":"Text"}}],
 "Demandes_RH":[
  {"id":"Reference","fields":{"type":"Text"}},{"id":"Demandeur","fields":{"type":"Ref:Ressources"}},
- {"id":"Type","fields":{"type":"Text"}},{"id":"Date_Debut","fields":{"type":"Date"}},
+ {"id":"Type","fields":{"type":"Text"}},{"id":"Type_Action","fields":{"type":"Text"}},{"id":"Demande_Origine","fields":{"type":"Ref:Demandes_RH"}},
+ {"id":"Date_Debut","fields":{"type":"Date"}},
  {"id":"Date_Fin","fields":{"type":"Date"}},{"id":"Motif","fields":{"type":"Ref:Motifs_RH"}},
  {"id":"Motif_Code","fields":{"type":"Text"}},{"id":"Statut","fields":{"type":"Text"}},
  {"id":"Manager_Email","fields":{"type":"Text"}},{"id":"Commentaire_Demandeur","fields":{"type":"Text"}},

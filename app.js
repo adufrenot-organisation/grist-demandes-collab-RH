@@ -1,4 +1,4 @@
-const VERSION="V1.60";
+const VERSION="V1.62";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -146,11 +146,21 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const ep=d=>Math.floor(new Date(d+"T00:00:00").getTime()/1000), st=r=>norm(F(r,"Statut")||"EN_ATTENTE").toUpperCase();
 const dt=v=>v?new Date(Number(v)*1000).toLocaleDateString("fr-FR"):"—";
 const todayStart=()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime()};
+const isCancellationRequest=r=>norm(F(r,"Type_Action")).toUpperCase()==="ANNULATION"||norm(F(r,"Type")).toUpperCase()==="ANNULATION";
+const acceptedStatus=r=>["VALIDEE","ACCEPTEE","ACCEPTE","ACCEPTED"].includes(st(r));
 const canCancel=r=>{
-  const status=st(r);
-  if(status==="ANNULEE"||status==="REFUSEE")return false;
+  // Annulation directe uniquement pour une demande encore en attente.
+  if(st(r)!=="EN_ATTENTE")return false;
   const start=Number(F(r,"Date_Debut")||0)*1000;
   return Boolean(start)&&start>=todayStart();
+};
+const canRequestCancellation=r=>{
+  if(!r||isCancellationRequest(r)||!acceptedStatus(r))return false;
+  if(presenceTypeForMotif(rid(F(r,"Motif")))!=="ABSENCE")return false;
+  const end=Number(F(r,"Date_Fin")||0)*1000;
+  if(!end||end<todayStart())return false;
+  const pending=(S.myRequests||[]).some(x=>isCancellationRequest(x)&&rid(F(x,"Demande_Origine"))===Number(r.id)&&st(x)==="EN_ATTENTE");
+  return !pending;
 };
 function rows(t){const ids=t.id||[];return ids.map((id,i)=>{const r={id};for(const k of Object.keys(t))if(k!=="id")r[k]=t[k]?.[i];return r})}
 async function table(name){return rows(await grist.docApi.fetchTable(name))}
@@ -324,34 +334,65 @@ function applyLabels(root=document){
 
 }
 
-// V1.60 — ordre administrable des menus Administration
-const MENU_ORDER_DEFS=[
-  ["resources","Ressources"],
-  ["managers","Managers & Ressources"],
-  ["motifs","Motifs RH"],
-  ["presenceMap","Correspondance présence"],
-  ["acl","ACL & Permissions"],
-  ["debug","Diagnostic"],
-  ["labels","Libellés de l’application"],
-  ["menuOrder","Ordre des menus"]
-];
+// V1.61 — ordre administrable des menus Utilisateur / Mon espace + Administration
+const MENU_ORDER_DEFS={
+  space:[
+    ["home","Accueil"],
+    ["new","Nouvelle demande"],
+    ["mine","Mes demandes"],
+    ["planning","Planning présence"],
+    ["all","Autres demandes"]
+  ],
+  admin:[
+    ["resources","Ressources"],
+    ["managers","Managers & Ressources"],
+    ["motifs","Motifs RH"],
+    ["presenceMap","Correspondance présence"],
+    ["acl","ACL & Permissions"],
+    ["debug","Diagnostic"],
+    ["labels","Libellés de l’application"],
+    ["menuOrder","Ordre des menus"]
+  ]
+};
 
 async function menuOrderTableExists(){
   try{await grist.docApi.fetchTable(T.menuOrder);return true}catch{return false}
 }
-function effectiveMenuOrder(){
-  const byView=Object.fromEntries((S.menuOrder||[]).map(r=>[norm(F(r,"View")),Number(F(r,"Ordre"))||9999]));
-  return MENU_ORDER_DEFS.map(([view,label],idx)=>({view,label,ordre:byView[view]??((idx+1)*10)}))
+function menuOrderSection(r){
+  const section=norm(F(r,"Section"));
+  // Compatibilité V1.58-V1.60 : les anciennes lignes concernaient Administration.
+  return section||"admin";
+}
+function effectiveMenuOrder(section="admin"){
+  const defs=MENU_ORDER_DEFS[section]||[];
+  const byView=Object.fromEntries((S.menuOrder||[])
+    .filter(r=>menuOrderSection(r)===section)
+    .map(r=>[norm(F(r,"View")),Number(F(r,"Ordre"))||9999]));
+  return defs.map(([view,label],idx)=>({section,view,label,ordre:byView[view]??((idx+1)*10)}))
     .sort((a,b)=>a.ordre-b.ordre||a.label.localeCompare(b.label,"fr"));
 }
 function applyMenuOrder(){
+  const sidebar=document.querySelector('.sidebar');
+  if(!sidebar)return;
+
+  const spaceTitle=sidebar.querySelector('.nav-title[data-accordion="space"]');
   const admin=$('adminNav');
-  if(!admin)return;
-  const buttons=[...admin.querySelectorAll('.accordion-admin.nav[data-view]')];
-  if(!buttons.length)return;
-  const rank=Object.fromEntries(effectiveMenuOrder().map((x,i)=>[x.view,i]));
-  buttons.sort((a,b)=>(rank[a.dataset.view]??9999)-(rank[b.dataset.view]??9999));
-  buttons.forEach(b=>admin.appendChild(b));
+
+  const spaceRank=Object.fromEntries(effectiveMenuOrder('space').map((x,i)=>[x.view,i]));
+  const spaceButtons=[...sidebar.querySelectorAll('.accordion-space.nav[data-view]')];
+  spaceButtons.sort((a,b)=>(spaceRank[a.dataset.view]??9999)-(spaceRank[b.dataset.view]??9999));
+  if(spaceTitle){
+    // Tous les boutons "Mon espace" restent juste après le titre de section.
+    let anchor=spaceTitle;
+    spaceButtons.forEach(b=>{anchor.insertAdjacentElement('afterend',b);anchor=b;});
+  }
+
+  if(admin){
+    const adminRank=Object.fromEntries(effectiveMenuOrder('admin').map((x,i)=>[x.view,i]));
+    const adminButtons=[...admin.querySelectorAll('.accordion-admin.nav[data-view]')];
+    adminButtons.sort((a,b)=>(adminRank[a.dataset.view]??9999)-(adminRank[b.dataset.view]??9999));
+    adminButtons.forEach(b=>admin.appendChild(b));
+  }
 }
 async function loadMenuOrder(){
   if(!(S.isAdmin||S.isOwner))return;
@@ -368,6 +409,13 @@ async function loadMenuOrder(){
   $('menuOrderManager')?.classList.toggle('hidden',!exists);
   if(exists)renderMenuOrderManager();
 }
+async function ensureMenuOrderSectionColumn(){
+  try{
+    await grist.docApi.applyUserActions([["AddColumn",T.menuOrder,"Section",{type:"Text"}]]);
+  }catch(e){
+    // Colonne déjà présente : rien à faire.
+  }
+}
 async function initMenuOrderTable(){
   if(!(S.isAdmin||S.isOwner))return;
   const btn=$('initMenuOrderBtn');
@@ -376,15 +424,31 @@ async function initMenuOrderTable(){
   try{
     if(!await menuOrderTableExists()){
       await grist.docApi.applyUserActions([["AddTable",T.menuOrder,[
-        {id:"View",type:"Text"},{id:"Libelle",type:"Text"},{id:"Ordre",type:"Int"}
+        {id:"Section",type:"Text"},{id:"View",type:"Text"},{id:"Libelle",type:"Text"},{id:"Ordre",type:"Int"}
       ]]]);
+    }else{
+      await ensureMenuOrderSectionColumn();
     }
-    const existing=await table(T.menuOrder);
-    const views=new Set(existing.map(r=>norm(F(r,"View"))));
-    const actions=MENU_ORDER_DEFS.filter(([view])=>!views.has(view)).map(([view,label],idx)=>["AddRecord",T.menuOrder,null,{View:view,Libelle:label,Ordre:(idx+1)*10}]);
+
+    let existing=await table(T.menuOrder);
+    // Migration des lignes V1.58-V1.60 : elles appartiennent à Administration.
+    const legacy=existing.filter(r=>!norm(F(r,"Section")));
+    if(legacy.length){
+      const t=grist.getTable(T.menuOrder);
+      for(const r of legacy)await t.update({id:r.id,fields:{Section:"admin"}});
+      existing=await table(T.menuOrder);
+    }
+
+    const keys=new Set(existing.map(r=>`${menuOrderSection(r)}:${norm(F(r,"View"))}`));
+    const actions=[];
+    Object.entries(MENU_ORDER_DEFS).forEach(([section,defs])=>{
+      defs.forEach(([view,label],idx)=>{
+        if(!keys.has(`${section}:${view}`)) actions.push(["AddRecord",T.menuOrder,null,{Section:section,View:view,Libelle:label,Ordre:(idx+1)*10}]);
+      });
+    });
     if(actions.length)await grist.docApi.applyUserActions(actions);
     await loadMenuOrder();
-    showMenuOrderMsg('Ordre des menus initialisé et vérifié.','success');
+    showMenuOrderMsg('Ordre des menus Utilisateur et Administration initialisé et vérifié.','success');
   }catch(e){
     showMenuOrderMsg('Impossible d’initialiser PARAM_MENU_ORDRE : '+(e?.message||String(e)),'danger');
     throw e;
@@ -396,23 +460,29 @@ function showMenuOrderMsg(text,type='success'){
   const el=$('menuOrderMsg');if(!el)return;
   el.textContent=text;el.classList.remove('hidden','success','danger');el.classList.add(type);
 }
-function renderMenuOrderManager(){
-  const body=$('menuOrderRows');if(!body||!S.menuOrderReady)return;
-  const rows=effectiveMenuOrder();
-  body.innerHTML=rows.map((x,i)=>`<tr><td><strong>${i+1}</strong></td><td>${esc(L('nav.'+x.view,x.label))}</td><td><span class="codechip">${esc(x.view)}</span></td><td><div class="label-actions"><button class="table-action" data-menu-up="${esc(x.view)}" ${i===0?'disabled':''}>↑</button><button class="table-action" data-menu-down="${esc(x.view)}" ${i===rows.length-1?'disabled':''}>↓</button></div></td></tr>`).join('');
-  body.querySelectorAll('[data-menu-up]').forEach(b=>b.onclick=()=>moveMenuOrder(b.dataset.menuUp,-1).catch(fatal));
-  body.querySelectorAll('[data-menu-down]').forEach(b=>b.onclick=()=>moveMenuOrder(b.dataset.menuDown,1).catch(fatal));
+function renderMenuOrderSection(section,bodyId){
+  const body=$(bodyId);if(!body||!S.menuOrderReady)return;
+  const rows=effectiveMenuOrder(section);
+  body.innerHTML=rows.map((x,i)=>`<tr><td><strong>${i+1}</strong></td><td>${esc(L('nav.'+x.view,x.label))}</td><td><span class="codechip">${esc(x.view)}</span></td><td><div class="label-actions"><button class="table-action" data-menu-section="${section}" data-menu-up="${esc(x.view)}" ${i===0?'disabled':''}>↑</button><button class="table-action" data-menu-section="${section}" data-menu-down="${esc(x.view)}" ${i===rows.length-1?'disabled':''}>↓</button></div></td></tr>`).join('');
+  body.querySelectorAll('[data-menu-up]').forEach(b=>b.onclick=()=>moveMenuOrder(b.dataset.menuSection,b.dataset.menuUp,-1).catch(fatal));
+  body.querySelectorAll('[data-menu-down]').forEach(b=>b.onclick=()=>moveMenuOrder(b.dataset.menuSection,b.dataset.menuDown,1).catch(fatal));
 }
-async function moveMenuOrder(view,delta){
+function renderMenuOrderManager(){
+  renderMenuOrderSection('space','menuOrderSpaceRows');
+  renderMenuOrderSection('admin','menuOrderAdminRows');
+}
+async function moveMenuOrder(section,view,delta){
   if(!(S.isAdmin||S.isOwner))return;
   if(!S.menuOrderReady){await initMenuOrderTable();}
-  const ordered=effectiveMenuOrder();
+  const ordered=effectiveMenuOrder(section);
   const i=ordered.findIndex(x=>x.view===view);
   const j=i+delta;
   if(i<0||j<0||j>=ordered.length)return;
-  const byView=Object.fromEntries((S.menuOrder||[]).map(r=>[norm(F(r,"View")),r]));
+  const byView=Object.fromEntries((S.menuOrder||[])
+    .filter(r=>menuOrderSection(r)===section)
+    .map(r=>[norm(F(r,"View")),r]));
   const a=byView[ordered[i].view], b=byView[ordered[j].view];
-  if(!a||!b){await initMenuOrderTable();return moveMenuOrder(view,delta);}
+  if(!a||!b){await initMenuOrderTable();return moveMenuOrder(section,view,delta);}
   const ta=Number(F(a,"Ordre"))||((i+1)*10), tb=Number(F(b,"Ordre"))||((j+1)*10);
   const t=grist.getTable(T.menuOrder);
   await t.update({id:a.id,fields:{Ordre:tb}});
@@ -971,13 +1041,15 @@ function render(){
   $("kr").textContent=S.myRequests.filter(r=>st(r)==="REFUSEE").length;
   const resourceById=id=>(S.resources||[]).find(x=>Number(x.id)===Number(id));
   const makeRows=(items,actions=true,showResource=false)=>items.length?items.map(r=>{
-    const editable=st(r)==="EN_ATTENTE";
+    const editable=st(r)==="EN_ATTENTE"&&!isCancellationRequest(r);
     const cancellable=canCancel(r);
+    const cancellationRequestable=canRequestCancellation(r);
     const resource=resourceById(rid(F(r,"Demandeur")));
     const resourceCell=showResource?`<td><strong>${esc(resource?resLabel(resource):"Ressource #"+rid(F(r,"Demandeur")))}</strong></td>`:"";
     const actionButtons=[];
     if(actions&&editable)actionButtons.push(`<button class="secondary" data-e="${r.id}">Modifier</button>`);
     if(actions&&cancellable)actionButtons.push(`<button class="secondary" data-c="${r.id}">Annuler</button>`);
+    if(actions&&cancellationRequestable)actionButtons.push(`<button class="secondary" data-ca="${r.id}">Demander l’annulation</button>`);
     const actionsCell=actionButtons.length?`<div class="rowactions">${actionButtons.join("")}</div>`:"";
     return `<tr>${resourceCell}<td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))}</td><td>${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actionsCell}</td></tr>`
   }).join(""):`<tr><td colspan="${showResource?8:7}">Aucune demande.</td></tr>`;
@@ -1016,6 +1088,7 @@ function render(){
   }
   document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{edit(+b.dataset.e);showView("new")});
   document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>cancelReq(+b.dataset.c));
+  document.querySelectorAll("[data-ca]").forEach(b=>b.onclick=()=>openCancellationRequest(+b.dataset.ca));
   renderAdmin();
 }
 function reset(){S.editing=null;$("formTitle").textContent="Nouvelle demande";$("save").textContent="Envoyer";$("type").value="CONGE";$("motif").value="";$("start").value="";$("end").value="";$("comment").value="";$("cancelEdit").classList.add("hidden")}
@@ -1055,6 +1128,73 @@ async function cancelReq(id){
   await syncRequestToCockpit(id);
   await load();
 }
+function isoDateFromEpoch(v){
+  if(!v)return "";
+  const d=new Date(Number(v)*1000);
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function todayIso(){
+  const d=new Date();
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function openCancellationRequest(id){
+  const r=(S.myRequests||[]).find(x=>Number(x.id)===Number(id));
+  if(!r||!canRequestCancellation(r))return;
+  const originalStart=isoDateFromEpoch(F(r,"Date_Debut"));
+  const originalEnd=isoDateFromEpoch(F(r,"Date_Fin"));
+  const minDate=originalStart>todayIso()?originalStart:todayIso();
+  $("cancelRequestOriginalId").value=String(r.id);
+  $("cancelRequestInfo").textContent=`${motifName(rid(F(r,"Motif")))} · ${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))} · ${F(r,"Reference")||"#"+r.id}`;
+  $("cancelRequestStart").min=minDate;
+  $("cancelRequestStart").max=originalEnd;
+  $("cancelRequestEnd").min=minDate;
+  $("cancelRequestEnd").max=originalEnd;
+  $("cancelRequestStart").value=minDate;
+  $("cancelRequestEnd").value=originalEnd;
+  $("cancelRequestComment").value="";
+  $("cancelRequestMsg").textContent="";
+  $("cancelRequestMsg").classList.add("hidden");
+  $("cancelRequestModal").classList.remove("hidden");
+}
+function closeCancellationRequest(){
+  $("cancelRequestModal").classList.add("hidden");
+}
+async function submitCancellationRequest(){
+  const originalId=Number($("cancelRequestOriginalId").value||0);
+  const original=(S.myRequests||[]).find(x=>Number(x.id)===originalId);
+  if(!original||!canRequestCancellation(original))throw new Error("Cette demande n’est plus éligible à une demande d’annulation.");
+  const a=$("cancelRequestStart").value,b=$("cancelRequestEnd").value;
+  const originalStart=isoDateFromEpoch(F(original,"Date_Debut"));
+  const originalEnd=isoDateFromEpoch(F(original,"Date_Fin"));
+  const minDate=originalStart>todayIso()?originalStart:todayIso();
+  if(!a||!b)return cancellationMsg("Période d’annulation obligatoire.");
+  if(a<minDate||b>originalEnd||b<a)return cancellationMsg(`La période doit être comprise entre le ${dt(ep(minDate))} et le ${dt(ep(originalEnd))}.`);
+  const u=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`;
+  const comment=$("cancelRequestComment").value.trim();
+  const originalRef=F(original,"Reference")||`#${original.id}`;
+  const fields={
+    Reference:`DRH-${new Date().getFullYear()}-${u.slice(0,8).toUpperCase()}`,
+    Demandeur:rid(F(original,"Demandeur"))||S.person?.id,
+    Type:"ANNULATION",
+    Type_Action:"ANNULATION",
+    Demande_Origine:original.id,
+    Date_Debut:ep(a),Date_Fin:ep(b),
+    Motif:rid(F(original,"Motif")),Motif_Code:F(original,"Motif_Code")||motifCode(rid(F(original,"Motif"))),
+    Commentaire_Demandeur:`Demande d’annulation de ${originalRef}${comment?` — ${comment}`:""}`,
+    Statut:"EN_ATTENTE",Date_Demande:Math.floor(Date.now()/1000),Date_Modification:Math.floor(Date.now()/1000),
+    UUID_Demande:u,Version_Sync:1
+  };
+  const created=await grist.getTable(T.requests).create({fields});
+  const newId=Number(created?.id||created)||0;
+  if(newId)await syncRequestToCockpit(newId);
+  closeCancellationRequest();
+  await load();
+}
+function cancellationMsg(t){
+  $("cancelRequestMsg").textContent=t;$("cancelRequestMsg").classList.remove("hidden");
+}
 function msg(t){$("msg").textContent=t;$("msg").classList.remove("hidden")}
 function fatal(e){
   const message=e?.message||String(e);
@@ -1078,6 +1218,9 @@ async function boot(){
   $("closeMotif").onclick=closeMotifEditor;
   $("cancelMotif").onclick=closeMotifEditor;
   $("saveMotif").onclick=()=>saveAdminMotif().catch(fatal);
+  if($("closeCancelRequest")) $("closeCancelRequest").onclick=closeCancellationRequest;
+  if($("cancelCancelRequest")) $("cancelCancelRequest").onclick=closeCancellationRequest;
+  if($("submitCancelRequest")) $("submitCancelRequest").onclick=()=>submitCancellationRequest().catch(e=>cancellationMsg(e?.message||String(e)));
   $("syncResourcesBtn").onclick=adminSyncResources;
   $("applyAcl").onclick=()=>{};
   $("initLabelsBtn").onclick=()=>initLabelsTable().catch(fatal);

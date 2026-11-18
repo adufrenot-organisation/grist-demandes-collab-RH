@@ -48,6 +48,7 @@ const schemas={
     {id:"Description",fields:{type:"Text"}}
   ],
   PARAM_MENU_ORDRE:[
+    {id:"Section",fields:{type:"Text"}},
     {id:"View",fields:{type:"Text"}},
     {id:"Libelle",fields:{type:"Text"}},
     {id:"Ordre",fields:{type:"Int"}}
@@ -67,6 +68,8 @@ const schemas={
     {id:"Reference",fields:{type:"Text"}},
     {id:"Demandeur",fields:{type:"Ref:Ressources"}},
     {id:"Type",fields:{type:"Text"}},
+    {id:"Type_Action",fields:{type:"Text"}},
+    {id:"Demande_Origine",fields:{type:"Ref:Demandes_RH"}},
     {id:"Date_Debut",fields:{type:"Date"}},
     {id:"Date_Fin",fields:{type:"Date"}},
     {id:"Motif",fields:{type:"Ref:Motifs_RH"}},
