@@ -1,6 +1,6 @@
-const VERSION="V1.52";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false};
+const VERSION="V1.57";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE"};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 const DEBUG_KEY="rh_debug_enabled";
 function debugIsEnabled(){
@@ -254,11 +254,11 @@ function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Co
 
 // V1.29 — libellés administrables localement dans Grist
 const LABEL_DEFS=[
- ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.all","Menu","Autres demandes"],
+ ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.planning","Menu","Planning présence"],["nav.all","Menu","Autres demandes"],
  ["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.motifs","Menu","Motifs RH"],["nav.presenceMap","Menu","Correspondance présence"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
  ["section.space","Menu","MON ESPACE"],["section.admin","Menu","ADMINISTRATION"],
  ["brand.title","En-tête","Demandes RH"],["brand.subtitle","En-tête","Portail collaborateur"],["header.eyebrow","En-tête","ESPACE RH"],
- ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.all","Pages","Autres demandes"],
+ ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.planning","Pages","Planning présence"],["page.all","Pages","Autres demandes"],
  ["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
  ["home.pill","Accueil","Portail collaborateur"],["home.hero","Accueil","Gérez vos demandes simplement."],
  ["mine.pill","Mes demandes","SUIVI"],["mine.title","Mes demandes","Mes demandes"],["mine.subtitle","Mes demandes","Historique et état de traitement."],
@@ -303,7 +303,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -542,8 +542,9 @@ function showView(name){
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"]};
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"]};
   if(name==="presenceMap")setTimeout(()=>renderPresenceMapAdmin().catch(showPresenceMapError),0);
+  if(name==="planning")setTimeout(()=>loadPlanning().catch(showPlanningError),0);
   const t=titles[name];
   const pageTitle=$("pageTitle");
   if(pageTitle){
@@ -623,6 +624,146 @@ async function saveAdminMotif(){
     $("motifAdminMsg").classList.remove("hidden");
   }
 }
+
+// V1.54 — planning présence restitué via PARAM_MOTIFS_PRESENCE
+function planningIsoDate(v){
+  if(!v)return "";
+  const d=new Date(Number(v)*1000);
+  return Number.isNaN(d.getTime())?"":d.toISOString().slice(0,10);
+}
+function localIsoToday(){
+  const d=new Date(), y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function addDaysIso(iso,n){
+  const d=new Date(`${iso}T12:00:00`);d.setDate(d.getDate()+n);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function frenchDateShort(iso){return new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR",{day:"numeric",month:"short"}).replace(".","")}
+function frenchDayHeader(iso){
+  const d=new Date(`${iso}T12:00:00`);
+  return {dow:d.toLocaleDateString("fr-FR",{weekday:"short"}).replace(".","").toUpperCase(),day:d.getDate(),weekend:[0,6].includes(d.getDay())};
+}
+function planningStatus(v){
+  const x=norm(v).toUpperCase().replace(/[ÉÈÊË]/g,"E");
+  if(["P","PRESENCE","PRESENT","JOUR_TRAVAILLE","TRAVAILLE"].includes(x))return "P";
+  if(["TL","TT","TELETRAVAIL","TELE-TRAVAIL"].includes(x))return "TL";
+  if(["A","ABSENCE","ABSENT"].includes(x))return "A";
+  if(["WE","WEEKEND","WEEK-END"].includes(x))return "WE";
+  return norm(v).slice(0,4).toUpperCase();
+}
+function planningStatusLabel(code){return ({P:"Jour travaillé",A:"Absence"})[code]||code||"Non renseigné"}
+function presenceTypeForMotifCode(code){
+  const wanted=norm(code).toUpperCase();
+  if(!wanted)return "";
+  const motif=(S.motifs||[]).find(m=>norm(F(m,"Code")).toUpperCase()===wanted);
+  return motif?presenceTypeForMotif(motif.id):"";
+}
+function planningDisplayForRow(row){
+  if(!row)return {code:"",type:"",reason:"Aucune donnée synchronisée"};
+  const motifCode=norm(F(row,"Motif_Code"));
+  const type=presenceTypeForMotifCode(motifCode);
+  if(type==="JOUR_TRAVAILLE")return {code:"P",type,reason:"Jour travaillé"};
+  if(type==="ABSENCE")return {code:"A",type,reason:"Absence"};
+  if(type==="AUCUN_IMPACT")return {code:"",type,reason:"Aucun impact sur la présence"};
+  return {code:"",type:"",reason:motifCode?`Motif ${motifCode} non configuré dans ${T.presenceMap}`:`Aucun motif synchronisé`};
+}
+function resourceById(id){return (S.resources||[]).find(r=>Number(r.id)===Number(id))||null}
+async function planningTableExists(){try{await grist.docApi.fetchTable(T.planning);return true}catch{return false}}
+async function ensurePlanningTable(){
+  if(await planningTableExists())return true;
+  if(!S.isOwner)throw new Error(`La table ${T.planning} est absente. Un Owner doit l'initialiser.`);
+  await grist.docApi.applyUserActions([["AddTable",T.planning,[
+    {id:"Ressource",type:"Ref:Ressources",label:"Ressource"},
+    {id:"Date",type:"Date",label:"Date"},
+    {id:"Statut",type:"Text",label:"Statut"},
+    {id:"Libelle",type:"Text",label:"Libellé"},
+    {id:"Motif_Code",type:"Text",label:"Code motif"},
+    {id:"Equipe_Code",type:"Text",label:"Équipe"},
+    {id:"Source_Feuille_ID",type:"Int",label:"ID source Cockpit"},
+    {id:"Derniere_Sync",type:"DateTime",label:"Dernière synchro"},
+    {id:"Erreur_Sync",type:"Text",label:"Erreur de synchro"}
+  ]]]);
+  return true;
+}
+async function loadPlanning(){
+  const exists=await planningTableExists();
+  S.planningReady=exists;
+  S.planningRows=exists?await table(T.planning):[];
+  await loadPresenceMappings();
+  if(!S.planningStart)S.planningStart=localIsoToday();
+  renderPlanning();
+}
+function showPlanningError(e){
+  const el=$("planningMsg");if(!el)return;el.textContent=e?.message||String(e);el.className="alert danger";el.classList.remove("hidden");
+}
+async function initPlanningTable(){await ensurePlanningTable();await loadPlanning();const el=$("planningMsg");if(el){el.textContent=`Table ${T.planning} initialisée.`;el.className="alert success";el.classList.remove("hidden")}}
+function renderPlanning(){
+  const setup=$("planningSetup"),grid=$("planningGrid"),init=$("initPlanningBtn");
+  if(setup)setup.classList.toggle("hidden",S.planningReady);
+  if(grid)grid.classList.toggle("hidden",!S.planningReady);
+  if(init)init.classList.toggle("hidden",!S.isOwner);
+  if(!S.planningReady){const st=$("planningSetupText");if(st)st.innerHTML=`La table <strong>${esc(T.planning)}</strong> n'existe pas encore dans le document Demande RH.`;return}
+  const start=S.planningStart||localIsoToday(), dates=Array.from({length:15},(_,i)=>addDaysIso(start,i)), end=dates[14];
+  const range=$("planningRange");if(range)range.textContent=`${frenchDateShort(start)} – ${frenchDateShort(end)} ${end.slice(0,4)}`;
+  const q=norm($("planningSearch")?.value).toLowerCase();
+  const canSeeAllTeams=!!(S.isAdmin||S.isOwner);
+  const ownTeam=norm(F(S.person||{},"Equipe_Code","Equipe","equipe"));
+  const teamSet=new Set((S.resources||[]).filter(r=>F(r,"Actif","actif")!==false).map(r=>norm(F(r,"Equipe_Code","Equipe","equipe"))).filter(Boolean));
+  const sel=$("planningTeam");
+  let team="";
+  if(sel){
+    const current=norm(sel.value);
+    if(canSeeAllTeams){
+      sel.disabled=false;
+      sel.innerHTML='<option value="">Toutes les équipes</option>'+[...teamSet].sort((a,b)=>a.localeCompare(b,"fr")).map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+      if([...teamSet].includes(current))sel.value=current;
+      team=norm(sel.value);
+    }else{
+      sel.disabled=true;
+      if(ownTeam){sel.innerHTML=`<option value="${esc(ownTeam)}">${esc(ownTeam)}</option>`;sel.value=ownTeam;team=ownTeam;}
+      else{sel.innerHTML='<option value="">Mon équipe</option>';sel.value="";team="";}
+    }
+  }else if(!canSeeAllTeams){team=ownTeam;}
+  const byResource=new Map();
+  for(const row of S.planningRows){
+    const id=rid(F(row,"Ressource")); if(!id)continue;
+    const iso=planningIsoDate(F(row,"Date")); if(!dates.includes(iso))continue;
+    if(!byResource.has(id))byResource.set(id,new Map());byResource.get(id).set(iso,row);
+  }
+  let resources=(S.resources||[]).filter(r=>F(r,"Actif","actif")!==false);
+  resources=resources.filter(r=>{
+    const t=norm(F(r,"Equipe_Code","Equipe","equipe"));const name=norm(F(r,"Nom","nom"));const mail=email(F(r,"Email","email"));
+    const allowedTeam=canSeeAllTeams?(!team||t===team):(ownTeam?t===ownTeam:Number(r.id)===Number(S.person?.id||0));
+    return allowedTeam&&(!q||`${name} ${mail} ${t}`.toLowerCase().includes(q));
+  }).sort((a,b)=>norm(F(a,"Nom")).localeCompare(norm(F(b,"Nom"),"fr")));
+  const count=$("planningCount");if(count)count.textContent=`${resources.length} ressource${resources.length>1?"s":""} affichée${resources.length>1?"s":""}`;
+  const head=$("planningHead");if(head)head.innerHTML='<th class="sticky-col resource-col">Ressource</th><th class="sticky-col team-col">Équipe</th>'+dates.map(d=>{const h=frenchDayHeader(d);return `<th class="planning-day ${h.weekend?"weekend":""}"><span>${h.dow}</span><strong>${h.day}</strong></th>`}).join("");
+  const body=$("planningBody");if(body)body.innerHTML=resources.length?resources.map(r=>{
+    const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,teamName=norm(F(r,"Equipe_Code","Equipe"))||"—";
+    const initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase();
+    const isOwnRow=Number(id)===Number(S.person?.id||0);
+    const cells=dates.map(d=>{
+      const row=byResource.get(id)?.get(d);const h=frenchDayHeader(d);const display=planningDisplayForRow(row);const code=display.code;
+      let title="Aucune donnée synchronisée";
+      if(row){
+        if(isOwnRow){
+          const motifCode=norm(F(row,"Motif_Code"));
+          const original=[norm(F(row,"Libelle")),motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);
+          title=[display.reason,...original].filter(Boolean).join(" · ")||"Donnée synchronisée";
+        }else{
+          title=code?display.reason:"Aucune information de présence affichable";
+        }
+      }
+      return `<td class="planning-cell ${h.weekend?"weekend":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}">${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;
+    }).join("");
+    return `<tr><td class="sticky-col resource-col"><div class="resource-name"><span class="resource-avatar">${esc(initials||"R")}</span><strong>${esc(name)}</strong></div></td><td class="sticky-col team-col" title="${esc(teamName)}">${esc(teamName)}</td>${cells}</tr>`;
+  }).join(""):`<tr><td colspan="17" class="planning-empty">Aucune présence synchronisée sur cette période.</td></tr>`;
+  const latest=(S.planningRows||[]).map(r=>Number(F(r,"Derniere_Sync")||0)).filter(Boolean).sort((a,b)=>b-a)[0];
+  const sync=$("planningSync");if(sync)sync.textContent=latest?`Synchronisé · ${new Date(latest*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:"En attente de synchronisation";
+}
+function shiftPlanning(days){S.planningStart=addDaysIso(S.planningStart||localIsoToday(),days);renderPlanning()}
+function resetPlanningToday(){S.planningStart=localIsoToday();renderPlanning()}
 
 // V1.52 — correspondance Motifs RH -> impact feuille de présence
 async function presenceMapTableExists(){
@@ -723,10 +864,41 @@ function render(){
   $("kw").textContent=S.myRequests.filter(r=>st(r)==="EN_ATTENTE").length;
   $("kv").textContent=S.myRequests.filter(r=>st(r)==="VALIDEE").length;
   $("kr").textContent=S.myRequests.filter(r=>st(r)==="REFUSEE").length;
-  const makeRows=(items,actions=true)=>items.length?items.map(r=>{const e=st(r)==="EN_ATTENTE";return `<tr><td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actions&&e?`<div class="rowactions"><button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button></div>`:""}</td></tr>`}).join(""):'<tr><td colspan="6">Aucune demande.</td></tr>';
+  const resourceById=id=>(S.resources||[]).find(x=>Number(x.id)===Number(id));
+  const makeRows=(items,actions=true,showResource=false)=>items.length?items.map(r=>{const e=st(r)==="EN_ATTENTE";const resource=resourceById(rid(F(r,"Demandeur")));const resourceCell=showResource?`<td><strong>${esc(resource?resLabel(resource):"Ressource #"+rid(F(r,"Demandeur")))}</strong></td>`:"";return `<tr>${resourceCell}<td><strong>${esc(F(r,"Reference")||"#"+r.id)}</strong></td><td>${esc(F(r,"Type")||"—")}</td><td>${dt(F(r,"Date_Debut"))} → ${dt(F(r,"Date_Fin"))}</td><td>${esc(motifName(rid(F(r,"Motif"))))}</td><td><span class="badge">${esc(st(r))}</span></td><td>${actions&&e?`<div class="rowactions"><button class="secondary" data-e="${r.id}">Modifier</button><button class="secondary" data-c="${r.id}">Annuler</button></div>`:""}</td></tr>`}).join(""):`<tr><td colspan="${showResource?7:6}">Aucune demande.</td></tr>`;
   $("rows").innerHTML=makeRows(S.myRequests.slice().reverse(),!S.viewAs);
   $("rowsHome").innerHTML=makeRows(S.myRequests.slice().reverse().slice(0,5),false);
-  if($("rowsAll")) $("rowsAll").innerHTML=makeRows((S.isAdmin||S.isOwner)?S.allRequests.filter(r=>!S.person||rid(F(r,"Demandeur"))!==Number(S.person.id)).slice().reverse():[],false);
+  if($("rowsAll")){
+    const allOther=(S.isAdmin||S.isOwner)?S.allRequests.filter(r=>!S.person||rid(F(r,"Demandeur"))!==Number(S.person.id)):[];
+    const teamFilter=$("allTeamFilter");
+    const resourceFilter=$("allResourceFilter");
+    const selectedTeam=teamFilter?.value||"";
+    const selectedResource=resourceFilter?.value||"";
+    const involvedIds=[...new Set(allOther.map(r=>Number(rid(F(r,"Demandeur")))).filter(Boolean))];
+    const involvedResources=involvedIds.map(id=>resourceById(id)).filter(Boolean);
+    const teamNames=[...new Set(involvedResources.map(r=>norm(F(r,"Equipe_Code","Equipe","equipe"))).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr"));
+    if(teamFilter){
+      teamFilter.innerHTML='<option value="">Toutes les équipes</option>'+teamNames.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+      if(selectedTeam&&teamNames.includes(selectedTeam))teamFilter.value=selectedTeam;
+    }
+    const activeTeam=teamFilter?.value||"";
+    const resourcesForTeam=involvedResources.filter(r=>!activeTeam||norm(F(r,"Equipe_Code","Equipe","equipe"))===activeTeam).sort((a,b)=>resLabel(a).localeCompare(resLabel(b),"fr"));
+    const allowedResourceIds=resourcesForTeam.map(r=>Number(r.id));
+    if(resourceFilter){
+      resourceFilter.innerHTML='<option value="">Toutes les ressources</option>'+resourcesForTeam.map(r=>`<option value="${r.id}">${esc(resLabel(r))}</option>`).join("");
+      if(selectedResource&&allowedResourceIds.includes(Number(selectedResource)))resourceFilter.value=selectedResource;
+    }
+    const activeResource=resourceFilter?.value||"";
+    const visible=allOther.filter(r=>{
+      const resource=resourceById(rid(F(r,"Demandeur")));
+      if(!resource)return false;
+      if(activeTeam&&norm(F(resource,"Equipe_Code","Equipe","equipe"))!==activeTeam)return false;
+      if(activeResource&&Number(resource.id)!==Number(activeResource))return false;
+      return true;
+    });
+    $("rowsAll").innerHTML=makeRows(visible.slice().reverse(),false,true);
+    if($("allRequestsCount")) $("allRequestsCount").textContent=`${visible.length} demande${visible.length>1?"s":""} affichée${visible.length>1?"s":""}`;
+  }
   document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{edit(+b.dataset.e);showView("new")});
   document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>cancelReq(+b.dataset.c));
   renderAdmin();
@@ -792,6 +964,15 @@ async function boot(){
   $("refresh").onclick=async()=>{await syncAll("manual");await load();await loadManagerContext()};
   $("syncNow").onclick=async()=>{await syncAll("manual");await load();await loadManagerContext()};
   $("viewAsSelect").onchange=e=>setViewAs(e.target.value);
+  if($("initPlanningBtn")) $("initPlanningBtn").onclick=()=>initPlanningTable().catch(showPlanningError);
+  if($("planningSearch")) $("planningSearch").oninput=()=>renderPlanning();
+  if($("planningTeam")) $("planningTeam").onchange=()=>renderPlanning();
+  if($("planningPrev")) $("planningPrev").onclick=()=>shiftPlanning(-15);
+  if($("planningNext")) $("planningNext").onclick=()=>shiftPlanning(15);
+  if($("planningToday")) $("planningToday").onclick=()=>resetPlanningToday();
+  if($("planningRefresh")) $("planningRefresh").onclick=()=>loadPlanning().catch(showPlanningError);
+  if($("allTeamFilter")) $("allTeamFilter").onchange=()=>render();
+  if($("allResourceFilter")) $("allResourceFilter").onchange=()=>render();
   renderDebug();
   await syncAll("startup")
   await identify();
@@ -833,7 +1014,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!sidebar) return;
 
   const groups = {
-    space: ["home","new","mine","all"],
+    space: ["home","new","mine","planning","all"],
     admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","sync"]
   };
 

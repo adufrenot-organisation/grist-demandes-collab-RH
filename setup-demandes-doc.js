@@ -47,6 +47,17 @@ const schemas={
     {id:"Actif",fields:{type:"Bool"}},
     {id:"Description",fields:{type:"Text"}}
   ],
+  PLANNING_PRESENCE:[
+    {id:"Ressource",fields:{type:"Ref:Ressources"}},
+    {id:"Date",fields:{type:"Date"}},
+    {id:"Statut",fields:{type:"Text"}},
+    {id:"Libelle",fields:{type:"Text"}},
+    {id:"Motif_Code",fields:{type:"Text"}},
+    {id:"Equipe_Code",fields:{type:"Text"}},
+    {id:"Source_Feuille_ID",fields:{type:"Int"}},
+    {id:"Derniere_Sync",fields:{type:"DateTime"}},
+    {id:"Erreur_Sync",fields:{type:"Text"}}
+  ],
   Demandes_RH:[
     {id:"Reference",fields:{type:"Text"}},
     {id:"Demandeur",fields:{type:"Ref:Ressources"}},

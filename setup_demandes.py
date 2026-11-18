@@ -26,6 +26,13 @@ schemas={
 "ADMIN_PORTAIL":[
  {"id":"Email","fields":{"type":"Text"}},{"id":"Nom","fields":{"type":"Text"}},
  {"id":"Role","fields":{"type":"Text"}},{"id":"Actif","fields":{"type":"Bool"}}],
+
+"PLANNING_PRESENCE":[
+ {"id":"Ressource","fields":{"type":"Ref:Ressources"}},{"id":"Date","fields":{"type":"Date"}},
+ {"id":"Statut","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},
+ {"id":"Motif_Code","fields":{"type":"Text"}},{"id":"Equipe_Code","fields":{"type":"Text"}},
+ {"id":"Source_Feuille_ID","fields":{"type":"Int"}},{"id":"Derniere_Sync","fields":{"type":"DateTime"}},
+ {"id":"Erreur_Sync","fields":{"type":"Text"}}],
 "Demandes_RH":[
  {"id":"Reference","fields":{"type":"Text"}},{"id":"Demandeur","fields":{"type":"Ref:Ressources"}},
  {"id":"Type","fields":{"type":"Text"}},{"id":"Date_Debut","fields":{"type":"Date"}},
@@ -61,4 +68,4 @@ if owner:
     print("Owner bootstrap configuré:",owner)
 else:
     print("OWNER_EMAIL non défini : table ADMIN_PORTAIL créée, mais aucun Owner bootstrap ajouté.")
-print("SETUP V1.9 OK")
+print("SETUP V1.54 OK")
