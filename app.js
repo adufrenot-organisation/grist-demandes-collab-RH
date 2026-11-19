@@ -1,4 +1,4 @@
-const VERSION="V1.66";
+const VERSION="V1.67";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -946,17 +946,24 @@ function forecastYearCount(resourceIds){
   const allowed=S.isOwner||S.isAdmin||profile==="PMO";
   if(!allowed)return null;
   const ids=new Set((resourceIds||[]).map(Number));
-  const today=localIsoToday(),year=today.slice(0,4),yearEnd=`${year}-12-31`;
+  const year=localIsoToday().slice(0,4),yearStart=`${year}-01-01`,yearEnd=`${year}-12-31`;
   const unique=new Set();
   for(const r of (S.allRequests||[])){
     if(!isForecastAbsenceRequest(r))continue;
     const resourceId=rid(F(r,"Demandeur"));if(!resourceId||!ids.has(Number(resourceId)))continue;
     const range=requestIsoRange(r);if(!range)continue;
-    let [a,b]=range;if(b<today||a>yearEnd)continue;
-    if(a<today)a=today;if(b>yearEnd)b=yearEnd;
+    let [a,b]=range;if(b<yearStart||a>yearEnd)continue;
+    if(a<yearStart)a=yearStart;if(b>yearEnd)b=yearEnd;
     eachIsoDate(a,b,d=>unique.add(`${resourceId}|${d}`));
   }
   return unique.size;
+}
+function canSeePlanningMotifDetails(resourceId){
+  const id=Number(resourceId||0);
+  if(!id)return false;
+  if(S.isOwner||S.isAdmin)return true;
+  if(id===Number(S.person?.id||0))return true;
+  return (S.managedResources||[]).some(x=>Number(x.id)===id);
 }
 async function planningTableExists(){try{await grist.docApi.fetchTable(T.planning);return true}catch{return false}}
 async function ensurePlanningTable(){
@@ -1039,7 +1046,7 @@ function renderPlanning(){
   const body=$("planningBody");if(body)body.innerHTML=resources.length?resources.map(r=>{
     const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,teamName=norm(F(r,"Equipe_Code","Equipe"))||"—";
     const initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase();
-    const isOwnRow=Number(id)===Number(S.person?.id||0);
+    const canSeeDetails=canSeePlanningMotifDetails(id);
     const cells=dates.map(d=>{
       const row=byResource.get(id)?.get(d);const h=frenchDayHeader(d);const display=planningDisplayForRow(row);
       const forecastRequests=forecastByResource.get(id)?.get(d)||[];
@@ -1053,12 +1060,12 @@ function renderPlanning(){
       else if(display.code==="A"&&showAbsence)code="A";
       let title="Aucune donnée synchronisée";
       if(usingForecast){
-        if(isOwnRow){
+        if(canSeeDetails){
           const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");
           title=`Absence prévisionnelle · ${details}`;
         }else title="Absence prévisionnelle";
       }else if(row){
-        if(isOwnRow){
+        if(canSeeDetails){
           const motifCode=norm(F(row,"Motif_Code"));
           const original=[norm(F(row,"Libelle")),motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);
           title=[display.reason,...original].filter(Boolean).join(" · ")||"Donnée synchronisée";
