@@ -721,3 +721,29 @@ main > header.app-header .header-identity{
 
 /* V1.71 — sélecteur de couleur explicite */
 .presence-color-control{display:flex;align-items:center;gap:8px;min-width:245px;flex-wrap:wrap}.presence-color-picker{position:relative;width:38px;height:34px;display:inline-block;cursor:pointer;flex:0 0 auto}.presence-color-picker input[type="color"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.presence-color-preview{display:block;width:38px;height:34px;border-radius:8px;border:2px solid #fff;box-shadow:0 0 0 1px #cbd5e1;pointer-events:none}.presence-color-picker:hover .presence-color-preview{box-shadow:0 0 0 2px #93a4bd}.presence-color-hex{width:88px!important;min-width:88px!important;max-width:88px!important;padding:7px 8px!important;font:11px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;text-transform:uppercase}.presence-color-control .table-action.small{white-space:nowrap}
+/* V1.75 — filtres planning avancés et paramétrage des semaines */
+.planning-filters{grid-template-columns:minmax(170px,.8fr) minmax(220px,1fr) minmax(210px,.95fr) minmax(165px,.72fr) minmax(135px,.55fr) auto minmax(250px,auto)}
+.planning-filter-label{display:block;margin-bottom:7px;font-size:11px;font-weight:800;color:#536079}
+.planning-resource-filter{min-width:0;position:relative}
+.planning-resource-filter details{position:relative}
+.planning-resource-filter summary{list-style:none;cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:10px;min-height:42px;padding:11px 36px 11px 12px;font-size:12px;font-weight:700;color:#1f2b46;position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.planning-resource-filter summary::-webkit-details-marker{display:none}
+.planning-resource-filter summary:after{content:'⌄';position:absolute;right:12px;top:9px;color:#64748b;font-size:18px}
+.planning-resource-filter details[open] summary:after{content:'⌃'}
+.planning-resource-popover{position:absolute;z-index:45;left:0;top:calc(100% + 6px);min-width:280px;max-width:360px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 40px rgba(30,41,59,.16);padding:10px}
+.planning-resource-actions{display:flex;justify-content:flex-end;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.secondary.compact{padding:7px 10px;min-height:unset;font-size:11px}
+.planning-resource-options{max-height:260px;overflow:auto;padding-top:6px;display:grid;gap:2px}
+.planning-resource-options label{display:flex!important;grid-template-columns:none!important;align-items:center;gap:9px;padding:8px 7px;border-radius:8px;font-size:12px!important;font-weight:650!important;color:#334155!important;cursor:pointer}
+.planning-resource-options label:hover{background:#f6f8fc}
+.planning-resource-options input{width:16px;height:16px;margin:0;accent-color:#2563eb}
+.planning-resource-empty{padding:12px;color:#64748b;font-size:12px}
+.planning-weeks-filter select{min-width:130px}
+.planning-week-choices{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 20px}
+.planning-week-choice{display:inline-flex!important;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fff;cursor:pointer;font-size:12px!important;color:#334155!important}
+.planning-week-choice input{width:16px;height:16px;accent-color:#2563eb}
+.planning-default-row{display:flex;align-items:end;gap:14px;flex-wrap:wrap}
+.planning-default-row label{display:grid;gap:7px;font-size:11px;font-weight:800;color:#536079;min-width:220px}
+@media(max-width:1350px){.planning-filters{grid-template-columns:repeat(3,minmax(180px,1fr))}.planning-range-nav{justify-content:flex-start}}
+@media(max-width:850px){.planning-filters{grid-template-columns:1fr 1fr}.planning-resource-popover{min-width:260px;max-width:min(360px,90vw)}}
+@media(max-width:600px){.planning-filters{grid-template-columns:1fr}.planning-resource-popover{position:relative;top:4px;min-width:0;max-width:none;width:100%;box-shadow:none}}

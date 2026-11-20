@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.69</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.75</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.72</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.75</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -26,6 +26,7 @@
     <button class="accordion-item accordion-admin nav" data-view="menuOrder">↕ <span>Ordre des menus</span></button>
     <button class="accordion-item accordion-admin nav" data-view="syncParams">⚙ <span>Paramètres de synchro</span></button>
     <button class="accordion-item accordion-admin nav" data-view="syncRequests">↻ <span>Demandes de synchro</span></button>
+    <button class="accordion-item accordion-admin nav" data-view="planningParams">▦ <span>Paramètres planning</span></button>
     
   </div>
   <div class="syncmini" id="syncMini">
@@ -66,7 +67,15 @@
  <div id="planningMsg" class="alert hidden"></div>
  <div id="planningSetup" class="card planning-setup hidden"><div class="section-head"><div><h3>Table planning absente</h3><p id="planningSetupText"></p></div><button id="initPlanningBtn" class="primary hidden">Initialiser la table</button></div><div class="setup-hint">Cette table est esclave : elle doit être alimentée par la synchronisation depuis Cockpit RH, pas modifiée par les utilisateurs.</div></div>
  <div id="planningGrid" class="hidden">
-  <div class="card planning-filters"><label>Équipe<select id="planningTeam"><option value="">Toutes les équipes</option></select></label><label class="planning-search"><span>⌕</span><input id="planningSearch" type="search" placeholder="Rechercher une ressource…"></label><label class="planning-date-filter">Début de période<input id="planningStartDate" type="date" aria-label="Choisir le début de la période de 15 jours"></label><button id="planningToday" class="planning-today">Aujourd’hui</button><div class="planning-range-nav"><button id="planningPrev" class="iconbtn" title="Période précédente de 15 jours">‹</button><strong id="planningRange"></strong><button id="planningNext" class="iconbtn" title="Période suivante de 15 jours">›</button></div></div>
+  <div class="card planning-filters">
+   <label>Équipe<select id="planningTeam"><option value="">Toutes les équipes</option></select></label>
+   <label class="planning-search"><span>⌕</span><input id="planningSearch" type="search" placeholder="Rechercher une ressource…"></label>
+   <div class="planning-resource-filter"><span class="planning-filter-label">Collaborateurs</span><details id="planningResourcesDetails"><summary id="planningResourceSummary">Tous les collaborateurs</summary><div class="planning-resource-popover"><div class="planning-resource-actions"><button id="planningResourcesAll" type="button" class="secondary compact">Tous</button></div><div id="planningResourceOptions" class="planning-resource-options"></div></div></details></div>
+   <label class="planning-date-filter">Début de période<input id="planningStartDate" type="date" aria-label="Choisir le début de la période"></label>
+   <label class="planning-weeks-filter">Durée<select id="planningWeeks" aria-label="Nombre de semaines affichées"><option value="2">2 semaines</option></select></label>
+   <button id="planningToday" class="planning-today">Aujourd’hui</button>
+   <div class="planning-range-nav"><button id="planningPrev" class="iconbtn" title="Période précédente">‹</button><strong id="planningRange"></strong><button id="planningNext" class="iconbtn" title="Période suivante">›</button></div>
+  </div>
   <div class="card planning-card"><div class="planning-toolbar"><div class="planning-metrics"><span id="planningCount" class="planning-count">0 ressource affichée</span><span id="planningForecastCount" class="planning-forecast-count hidden"></span><span id="planningPresenceRate" class="planning-presence-rate">Taux de présence —</span></div><div class="planning-display-filters" aria-label="Filtres d’affichage du planning"><label><input id="planningShowWorked" type="checkbox" checked><span><b class="presence-chip status-p">P</b> Jours travaillés</span></label><label><input id="planningShowAbsence" type="checkbox" checked><span><b class="presence-chip status-a">A</b> Absences</span></label><label><input id="planningShowForecast" type="checkbox" checked><span><b class="presence-chip status-ap">AP</b> Absences prévisionnelles</span></label></div><div class="planning-legend"><span class="planning-map-note">Selon PARAM_MOTIFS_PRESENCE</span></div><div class="planning-actions"><span class="readonly-badge">🔒 Lecture seule</span><button id="planningRefresh" class="iconbtn" title="Actualiser le planning">↻</button></div></div><div class="planning-tablewrap"><table class="planning-table"><thead><tr id="planningHead"></tr></thead><tbody id="planningBody"></tbody></table></div></div>
  </div>
 </section>
@@ -82,6 +91,8 @@
 <input id="cancelRequestOriginalId" type="hidden">
 <div class="formgrid"><label>Date de début à annuler<input id="cancelRequestStart" type="date"></label><label>Date de fin à annuler<input id="cancelRequestEnd" type="date"></label><label class="wide">Commentaire<textarea id="cancelRequestComment" rows="4" placeholder="Précisez si nécessaire la raison de l’annulation…"></textarea></label></div>
 <div id="cancelRequestMsg" class="alert hidden"></div><div class="actions"><button id="cancelCancelRequest" class="secondary" type="button">Fermer</button><button id="submitCancelRequest" class="primary" type="button">Envoyer la demande d’annulation</button></div></div></div>
+
+<div id="annualPresenceModal" class="modal hidden"><div class="modalbox annual-presence-modal"><div class="modalhead"><div><span class="pill">PRÉSENCE ANNUELLE</span><h3 id="annualPresenceTitle">Calendrier de présence</h3><p id="annualPresenceSubtitle" class="modal-subtitle"></p></div><button id="closeAnnualPresence" class="iconbtn" type="button" aria-label="Fermer">×</button></div><div class="annual-presence-toolbar"><label>Année<select id="annualPresenceYear"></select></label><div class="annual-presence-kpis"><span id="annualPresenceRateKpi" class="annual-kpi rate">Taux de présence —</span><span id="annualAbsenceKpi" class="annual-kpi absence">0 jour d’absence</span></div></div><div class="annual-presence-legend"><span><b class="presence-chip status-p">P</b> Jour travaillé</span><span><b class="presence-chip status-a">A</b> Absence</span><span><b class="presence-chip status-ap">AP</b> Absence prévisionnelle</span></div><div id="annualPresenceCalendar" class="annual-calendar"></div></div></div>
 
 <section id="view-resources" class="view adminview">
 <div class="pagehead"><div><span class="pill adminpill">MASTER / SLAVE</span><h2>Ressources</h2><p>Référentiel en lecture seule, alimenté depuis Cockpit.Team.</p></div><button id="syncResourcesBtn" class="primary">↻ Rafraîchir</button></div>
@@ -105,7 +116,6 @@
 <div class="pagehead"><div><span class="pill adminpill">RÉFÉRENTIEL LOCAL</span><h2>Motifs RH</h2><p>Catalogue propre au portail. Le Code assure la correspondance avec le Cockpit.</p></div><button id="newMotifBtn" class="primary">＋ Nouveau motif</button></div>
 <div class="card"><div class="tablewrap"><table><thead><tr><th>Code</th><th>Libellé</th><th>Description</th><th>État</th><th></th></tr></thead><tbody id="motifsRows"></tbody></table></div></div>
 
-<div id="annualPresenceModal" class="modal hidden"><div class="modalbox annual-presence-modal"><div class="modalhead"><div><span class="pill">PRÉSENCE ANNUELLE</span><h3 id="annualPresenceTitle">Calendrier de présence</h3><p id="annualPresenceSubtitle" class="modal-subtitle"></p></div><button id="closeAnnualPresence" class="iconbtn" type="button" aria-label="Fermer">×</button></div><div class="annual-presence-toolbar"><label>Année<select id="annualPresenceYear"></select></label><div class="annual-presence-kpis"><span id="annualPresenceRateKpi" class="annual-kpi rate">Taux de présence —</span><span id="annualAbsenceKpi" class="annual-kpi absence">0 jour d’absence</span></div></div><div class="annual-presence-legend"><span><b class="presence-chip status-p">P</b> Jour travaillé</span><span><b class="presence-chip status-a">A</b> Absence</span><span><b class="presence-chip status-ap">AP</b> Absence prévisionnelle</span></div><div id="annualPresenceCalendar" class="annual-calendar"></div></div></div>
 <div id="motifEditor" class="modal hidden"><div class="modalbox"><div class="modalhead"><div><span class="pill adminpill">MOTIF RH</span><h3 id="motifEditorTitle">Nouveau motif</h3></div><button id="closeMotif" class="iconbtn">×</button></div>
 <div class="formgrid"><label>Code<input id="motifCodeAdmin" maxlength="40" placeholder="Ex. CP"></label><label>Libellé<input id="motifLabelAdmin" maxlength="120" placeholder="Ex. Congés payés"></label><label class="wide">Description<textarea id="motifDescAdmin" rows="4"></textarea></label><label class="toggleline wide"><input id="motifActiveAdmin" type="checkbox" checked> Motif actif</label></div>
 <div id="motifAdminMsg" class="alert hidden"></div><div class="actions"><button id="cancelMotif" class="secondary">Annuler</button><button id="saveMotif" class="primary">Enregistrer</button></div></div></div>
@@ -164,6 +174,17 @@
   <div class="section-head"><div><h3>Journal technique</h3><p id="debugStatus">Inactif</p></div><label class="debug-toggle"><input id="debugToggle" type="checkbox"> Activer le mode debug</label></div>
   <div class="debug-actions"><button id="copyDebugBtn" class="secondary" type="button">Copier le diagnostic</button></div>
   <pre id="debugOutput" class="debug-pre"></pre>
+ </div>
+</section>
+
+<section id="view-planningParams" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">PLANNING</span><h2>Paramètres planning</h2><p>Choisissez les durées proposées aux utilisateurs et la durée sélectionnée par défaut.</p></div></div>
+ <div id="planningParamsMsg" class="alert hidden"></div>
+ <div id="planningParamsSetup" class="card"><div class="section-head"><div><h3>Table PARAM_PLANNING</h3><p id="planningParamsSetupText">Vérification…</p></div><button id="initPlanningParamsBtn" class="primary">Initialiser / compléter la table</button></div></div>
+ <div id="planningParamsManager" class="card hidden">
+  <div class="section-head"><div><h3>Durées disponibles</h3><p>Sélectionnez les choix de durée visibles dans le planning. De 1 à 8 semaines.</p></div></div>
+  <div id="planningWeekChoices" class="planning-week-choices"></div>
+  <div class="planning-default-row"><label>Durée par défaut<select id="planningDefaultWeeks"></select></label><button id="savePlanningParamsBtn" class="primary" type="button">Enregistrer</button></div>
  </div>
 </section>
 

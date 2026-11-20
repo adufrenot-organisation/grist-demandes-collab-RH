@@ -1,6 +1,6 @@
-const VERSION="V1.69";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false};
+const VERSION="V1.75";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING"};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[]};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 const DEBUG_KEY="rh_debug_enabled";
 function debugIsEnabled(){
@@ -271,11 +271,11 @@ function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Co
 // V1.29 — libellés administrables localement dans Grist
 const LABEL_DEFS=[
  ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.planning","Menu","Planning présence"],["nav.all","Menu","Autres demandes"],
- ["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.motifs","Menu","Motifs RH"],["nav.presenceMap","Menu","Correspondance présence"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
+ ["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.planningParams","Menu","Paramètres planning"],["nav.motifs","Menu","Motifs RH"],["nav.presenceMap","Menu","Correspondance présence"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
  ["section.space","Menu","MON ESPACE"],["section.admin","Menu","ADMINISTRATION"],
  ["brand.title","En-tête","Demandes RH"],["brand.subtitle","En-tête","Portail collaborateur"],["header.eyebrow","En-tête","ESPACE RH"],
  ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.planning","Pages","Planning présence"],["page.all","Pages","Autres demandes"],
- ["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
+ ["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.planningParams","Pages","Paramètres planning"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
  ["home.pill","Accueil","Portail collaborateur"],["home.hero","Accueil","Gérez vos demandes simplement."],
  ["mine.pill","Mes demandes","SUIVI"],["mine.title","Mes demandes","Mes demandes"],["mine.subtitle","Mes demandes","Historique et état de traitement."],
  ["all.pill","Autres demandes","ADMIN"],["all.title","Autres demandes","Autres demandes"],
@@ -319,7 +319,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder",syncParams:"nav.syncParams",syncRequests:"nav.syncRequests"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder",syncParams:"nav.syncParams",syncRequests:"nav.syncRequests",planningParams:"nav.planningParams"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -353,7 +353,8 @@ const MENU_ORDER_DEFS={
     ["labels","Libellés de l’application"],
     ["menuOrder","Ordre des menus"],
     ["syncParams","Paramètres de synchro"],
-    ["syncRequests","Demandes de synchro"]
+    ["syncRequests","Demandes de synchro"],
+    ["planningParams","Paramètres planning"]
   ]
 };
 
@@ -529,6 +530,74 @@ function renderSyncParams(){
 async function saveSyncParam(id){
   const input=document.querySelector(`[data-sync-param="${id}"]`);if(!input)return;await grist.getTable(T.syncParams).update({id,fields:{Valeur:input.value.trim()}});await loadSyncParams();showSyncAdminMsg('syncParamsMsg','Paramètre enregistré.');
 }
+
+// V1.75 — paramétrage des durées du planning
+function planningParamValue(key,fallback=""){
+  const row=(S.planningParams||[]).find(r=>norm(F(r,"Cle"))===key);
+  return row?norm(F(row,"Valeur")):fallback;
+}
+function planningWeekOptions(){
+  const raw=planningParamValue("PLANNING_SEMAINES_DISPONIBLES","2,3,4");
+  const vals=[...new Set(raw.split(/[,;\s]+/).map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=8))].sort((a,b)=>a-b);
+  return vals.length?vals:[2,3,4];
+}
+function planningDefaultWeeks(){
+  const options=planningWeekOptions();
+  const d=Number(planningParamValue("PLANNING_SEMAINES_DEFAUT","2"));
+  return options.includes(d)?d:options[0];
+}
+async function initPlanningParamsTable(){
+  if(!(S.isAdmin||S.isOwner))return;
+  if(!await gristTableExists(T.planningParams)){
+    await grist.docApi.applyUserActions([["AddTable",T.planningParams,[{id:"Cle",type:"Text"},{id:"Valeur",type:"Text"},{id:"Commentaire",type:"Text"}]]]);
+  }
+  const existing=await table(T.planningParams),keys=new Set(existing.map(r=>norm(F(r,"Cle"))));
+  const defs=[
+    ["PLANNING_SEMAINES_DISPONIBLES","2,3,4","Durées proposées dans le planning, en semaines (1 à 8)"],
+    ["PLANNING_SEMAINES_DEFAUT","2","Durée sélectionnée par défaut dans le planning"]
+  ];
+  const actions=defs.filter(x=>!keys.has(x[0])).map(x=>["AddRecord",T.planningParams,null,{Cle:x[0],Valeur:x[1],Commentaire:x[2]}]);
+  if(actions.length)await grist.docApi.applyUserActions(actions);
+  await loadPlanningParams();showSyncAdminMsg("planningParamsMsg","PARAM_PLANNING initialisée / complétée.");
+}
+async function loadPlanningParams(){
+  const exists=await gristTableExists(T.planningParams);
+  S.planningParamsReady=exists;S.planningParams=exists?await table(T.planningParams):[];
+  const opts=planningWeekOptions();
+  if(!opts.includes(Number(S.planningWeeks)))S.planningWeeks=planningDefaultWeeks();
+  const setup=$("planningParamsSetupText");if(setup)setup.innerHTML=exists?`<strong>PARAM_PLANNING</strong> disponible · ${S.planningParams.length} paramètre(s).`:`<strong>PARAM_PLANNING</strong> absente.`;
+  $("planningParamsManager")?.classList.toggle("hidden",!exists);
+  if(exists&&$("planningParamsManager"))renderPlanningParamsAdmin();
+  if($("planningWeeks"))renderPlanningWeekSelect();
+}
+function renderPlanningParamsAdmin(){
+  const allowed=new Set(planningWeekOptions()),def=planningDefaultWeeks();
+  const box=$("planningWeekChoices");
+  if(box)box.innerHTML=Array.from({length:8},(_,i)=>i+1).map(n=>`<label class="planning-week-choice"><input type="checkbox" value="${n}" ${allowed.has(n)?"checked":""}><span>${n} semaine${n>1?"s":""}</span></label>`).join("");
+  const sel=$("planningDefaultWeeks");if(sel){sel.innerHTML=[...allowed].sort((a,b)=>a-b).map(n=>`<option value="${n}">${n} semaine${n>1?"s":""}</option>`).join("");sel.value=String(def);}
+}
+async function savePlanningParams(){
+  if(!(S.isAdmin||S.isOwner))return;
+  const selected=[...document.querySelectorAll('#planningWeekChoices input[type="checkbox"]:checked')].map(x=>Number(x.value)).filter(Boolean).sort((a,b)=>a-b);
+  if(!selected.length)throw new Error("Sélectionnez au moins une durée de planning.");
+  const def=Number($("planningDefaultWeeks")?.value||selected[0]);
+  const actualDefault=selected.includes(def)?def:selected[0];
+  const tbl=grist.getTable(T.planningParams);
+  const byKey=Object.fromEntries((S.planningParams||[]).map(r=>[norm(F(r,"Cle")),r]));
+  for(const [key,value] of [["PLANNING_SEMAINES_DISPONIBLES",selected.join(",")],["PLANNING_SEMAINES_DEFAUT",String(actualDefault)]]){
+    if(byKey[key])await tbl.update({id:byKey[key].id,fields:{Valeur:value}});
+    else await tbl.create({fields:{Cle:key,Valeur:value,Commentaire:key.endsWith("DEFAUT")?"Durée sélectionnée par défaut dans le planning":"Durées proposées dans le planning, en semaines (1 à 8)"}});
+  }
+  await loadPlanningParams();S.planningWeeks=planningDefaultWeeks();renderPlanning();showSyncAdminMsg("planningParamsMsg","Paramètres du planning enregistrés.");
+}
+function renderPlanningWeekSelect(){
+  const sel=$("planningWeeks");if(!sel)return;
+  const opts=planningWeekOptions(),current=opts.includes(Number(S.planningWeeks))?Number(S.planningWeeks):planningDefaultWeeks();
+  S.planningWeeks=current;
+  sel.innerHTML=opts.map(n=>`<option value="${n}">${n} semaine${n>1?"s":""}</option>`).join("");
+  sel.value=String(current);
+}
+
 async function initSyncRequestsTable(){
   if(!(S.isAdmin||S.isOwner))return;
   if(!await gristTableExists(T.syncRequests)){await grist.docApi.applyUserActions([["AddTable",T.syncRequests,[
@@ -775,17 +844,18 @@ function showView(name){
   if(name==="managers"&&!(S.isAdmin||S.isOwner))return;
   if(name==="labels"&&!(S.isAdmin||S.isOwner))return;
   if(name==="menuOrder"&&!(S.isAdmin||S.isOwner))return;
-  if(["syncParams","syncRequests"].includes(name)&&!(S.isAdmin||S.isOwner))return;
+  if(["syncParams","syncRequests","planningParams"].includes(name)&&!(S.isAdmin||S.isOwner))return;
   if(name==="all"&&!(S.isAdmin||S.isOwner))return;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"]};
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"],planningParams:["page.planningParams","Paramètres planning"]};
   if(name==="presenceMap")setTimeout(()=>renderPresenceMapAdmin().catch(showPresenceMapError),0);
   if(name==="planning")setTimeout(()=>loadPlanning().catch(showPlanningError),0);
   if(name==="syncParams")setTimeout(()=>loadSyncParams().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger")),0);
   if(name==="syncRequests")setTimeout(()=>loadSyncRequests().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger")),0);
+  if(name==="planningParams")setTimeout(()=>loadPlanningParams().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger")),0);
   const t=titles[name];
   const pageTitle=$("pageTitle");
   if(pageTitle){
@@ -885,6 +955,33 @@ function frenchDayHeader(iso){
   const d=new Date(`${iso}T12:00:00`);
   return {dow:d.toLocaleDateString("fr-FR",{weekday:"short"}).replace(".","").toUpperCase(),day:d.getDate(),weekend:[0,6].includes(d.getDay())};
 }
+function easterSundayIso(year){
+  // Algorithme de Meeus/Jones/Butcher (calendrier grégorien).
+  const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4;
+  const f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const month=Math.floor((h+l-7*m+114)/31),day=((h+l-7*m+114)%31)+1;
+  return `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+}
+const FRENCH_HOLIDAY_CACHE=new Map();
+function frenchPublicHolidays(year){
+  const y=Number(year);if(!Number.isFinite(y))return new Set();
+  if(FRENCH_HOLIDAY_CACHE.has(y))return FRENCH_HOLIDAY_CACHE.get(y);
+  const easter=easterSundayIso(y);
+  const set=new Set([
+    `${y}-01-01`, addDaysIso(easter,1), `${y}-05-01`, `${y}-05-08`,
+    addDaysIso(easter,39), addDaysIso(easter,50), `${y}-07-14`, `${y}-08-15`,
+    `${y}-11-01`, `${y}-11-11`, `${y}-12-25`
+  ]);
+  FRENCH_HOLIDAY_CACHE.set(y,set);return set;
+}
+function isWeekendIso(iso){
+  const d=new Date(`${iso}T12:00:00`);return Number.isNaN(d.getTime())?false:[0,6].includes(d.getDay());
+}
+function isFrenchPublicHolidayIso(iso){
+  if(!iso||iso.length<4)return false;return frenchPublicHolidays(Number(iso.slice(0,4))).has(iso);
+}
+function isCountablePresenceDay(iso){return !!iso&&!isWeekendIso(iso)&&!isFrenchPublicHolidayIso(iso);}
 function planningStatus(v){
   const x=norm(v).toUpperCase().replace(/[ÉÈÊË]/g,"E");
   if(["P","PRESENCE","PRESENT","JOUR_TRAVAILLE","TRAVAILLE"].includes(x))return "P";
@@ -950,7 +1047,7 @@ function annualConfirmedStats(resourceIds,year){
   const byKey=new Map();
   for(const row of (S.planningRows||[])){
     const resourceId=Number(rid(F(row,"Ressource"))||0);if(!resourceId||!ids.has(resourceId))continue;
-    const iso=planningIsoDate(F(row,"Date"));if(!iso||iso.slice(0,4)!==String(year))continue;
+    const iso=planningIsoDate(F(row,"Date"));if(!iso||iso.slice(0,4)!==String(year)||!isCountablePresenceDay(iso))continue;
     const display=planningDisplayForRow(row);if(!["P","A"].includes(display.code))continue;
     byKey.set(`${resourceId}|${iso}`,display.code);
   }
@@ -959,6 +1056,29 @@ function annualConfirmedStats(resourceIds,year){
   const denominator=worked+absence;
   return {worked,absence,total:denominator,rate:denominator?worked*100/denominator:null};
 }
+
+function periodConfirmedStats(resourceIds,dates){
+  const ids=new Set((resourceIds||[]).map(Number).filter(Boolean)),wanted=new Set(dates||[]),byKey=new Map();
+  for(const row of (S.planningRows||[])){
+    const resourceId=Number(rid(F(row,"Ressource"))||0);if(!resourceId||!ids.has(resourceId))continue;
+    const iso=planningIsoDate(F(row,"Date"));if(!iso||!wanted.has(iso)||!isCountablePresenceDay(iso))continue;
+    const display=planningDisplayForRow(row);if(!["P","A"].includes(display.code))continue;
+    byKey.set(`${resourceId}|${iso}`,display.code);
+  }
+  let worked=0,absence=0;for(const code of byKey.values()){if(code==="P")worked++;else if(code==="A")absence++;}
+  const total=worked+absence;return {worked,absence,total,rate:total?worked*100/total:null};
+}
+function periodForecastCount(resourceIds,dates){
+  const allowed=S.isOwner||S.isAdmin||isPmo();if(!allowed)return null;
+  const ids=new Set((resourceIds||[]).map(Number).filter(Boolean)),wanted=new Set(dates||[]),unique=new Set();
+  const forecast=forecastMapForDates(dates||[]);
+  for(const resourceId of ids){
+    const byDate=forecast.get(resourceId);if(!byDate)continue;
+    for(const [iso,requests] of byDate.entries())if(wanted.has(iso)&&requests?.length&&isCountablePresenceDay(iso))unique.add(`${resourceId}|${iso}`);
+  }
+  return unique.size;
+}
+
 function annualPresenceRateGlobal(){
   const active=(S.resources||[]).filter(r=>F(r,"Actif","actif")!==false);
   const canSeeAll=!!(S.isAdmin||S.isOwner||isPmo());
@@ -1081,7 +1201,7 @@ function forecastYearCount(){
     let [a,b]=range;
     if(b<yearStart||a>yearEnd)continue;
     if(a<yearStart)a=yearStart;if(b>yearEnd)b=yearEnd;
-    eachIsoDate(a,b,d=>unique.add(`${resourceId}|${d}`));
+    eachIsoDate(a,b,d=>{if(isCountablePresenceDay(d))unique.add(`${resourceId}|${d}`);});
   }
   return unique.size;
 }
@@ -1116,6 +1236,7 @@ async function loadPlanning(){
   S.planningReady=exists;
   S.planningRows=exists?await table(T.planning):[];
   await loadPresenceMappings();
+  await loadPlanningParams().catch(()=>{});
   if(!S.planningStart)S.planningStart=localIsoToday();
   renderPlanning();
 }
@@ -1129,100 +1250,46 @@ function renderPlanning(){
   if(grid)grid.classList.toggle("hidden",!S.planningReady);
   if(init)init.classList.toggle("hidden",!S.isOwner);
   if(!S.planningReady){const st=$("planningSetupText");if(st)st.innerHTML=`La table <strong>${esc(T.planning)}</strong> n'existe pas encore dans le document Demande RH.`;return}
-  const start=S.planningStart||localIsoToday(), dates=Array.from({length:15},(_,i)=>addDaysIso(start,i)), end=dates[14];
+  renderPlanningWeekSelect();
+  const weeks=Number(S.planningWeeks||planningDefaultWeeks()),dayCount=Math.max(7,weeks*7);
+  const start=S.planningStart||localIsoToday(),dates=Array.from({length:dayCount},(_,i)=>addDaysIso(start,i)),end=dates[dates.length-1];
   const startInput=$("planningStartDate");if(startInput&&startInput.value!==start)startInput.value=start;
   const range=$("planningRange");if(range)range.textContent=`${frenchDateShort(start)} – ${frenchDateShort(end)} ${end.slice(0,4)}`;
+  const prev=$("planningPrev"),next=$("planningNext");if(prev)prev.title=`Période précédente de ${weeks} semaine${weeks>1?"s":""}`;if(next)next.title=`Période suivante de ${weeks} semaine${weeks>1?"s":""}`;
   const q=norm($("planningSearch")?.value).toLowerCase();
-  const canSeeAllTeams=!!(S.isAdmin||S.isOwner);
-  const ownTeam=norm(F(S.person||{},"Equipe_Code","Equipe","equipe"));
-  const teamSet=new Set((S.resources||[]).filter(r=>F(r,"Actif","actif")!==false).map(r=>norm(F(r,"Equipe_Code","Equipe","equipe"))).filter(Boolean));
-  const sel=$("planningTeam");
-  let team="";
+  const canSeeAllTeams=!!(S.isAdmin||S.isOwner),ownTeam=norm(F(S.person||{},"Equipe_Code","Equipe","equipe"));
+  const active=(S.resources||[]).filter(r=>F(r,"Actif","actif")!==false);
+  const teamSet=new Set(active.map(r=>norm(F(r,"Equipe_Code","Equipe","equipe"))).filter(Boolean));
+  const sel=$("planningTeam");let team="";
   if(sel){
     const current=norm(sel.value);
-    if(canSeeAllTeams){
-      sel.disabled=false;
-      sel.innerHTML='<option value="">Toutes les équipes</option>'+[...teamSet].sort((a,b)=>a.localeCompare(b,"fr")).map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
-      if([...teamSet].includes(current))sel.value=current;
-      team=norm(sel.value);
-    }else{
-      sel.disabled=true;
-      if(ownTeam){sel.innerHTML=`<option value="${esc(ownTeam)}">${esc(ownTeam)}</option>`;sel.value=ownTeam;team=ownTeam;}
-      else{sel.innerHTML='<option value="">Mon équipe</option>';sel.value="";team="";}
-    }
-  }else if(!canSeeAllTeams){team=ownTeam;}
+    if(canSeeAllTeams){sel.disabled=false;sel.innerHTML='<option value="">Toutes les équipes</option>'+[...teamSet].sort((a,b)=>a.localeCompare(b,"fr")).map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");if([...teamSet].includes(current))sel.value=current;team=norm(sel.value);}
+    else{sel.disabled=true;if(ownTeam){sel.innerHTML=`<option value="${esc(ownTeam)}">${esc(ownTeam)}</option>`;sel.value=ownTeam;team=ownTeam;}else{sel.innerHTML='<option value="">Mon équipe</option>';sel.value="";team="";}}
+  }else if(!canSeeAllTeams)team=ownTeam;
+  let teamCandidates=active.filter(r=>{const t=norm(F(r,"Equipe_Code","Equipe","equipe"));return canSeeAllTeams?(!team||t===team):(ownTeam?t===ownTeam:Number(r.id)===Number(S.person?.id||0));}).sort((a,b)=>norm(F(a,"Nom")).localeCompare(norm(F(b,"Nom"),"fr")));
+  const candidateIds=new Set(teamCandidates.map(r=>Number(r.id)));
+  S.planningSelectedResourceIds=(S.planningSelectedResourceIds||[]).map(Number).filter(id=>candidateIds.has(id));
+  const selectedIds=new Set(S.planningSelectedResourceIds);
+  const options=$("planningResourceOptions");
+  if(options)options.innerHTML=teamCandidates.map(r=>{const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`;return `<label><input type="checkbox" value="${id}" ${selectedIds.has(id)?"checked":""}><span>${esc(name)}</span></label>`}).join("")||'<div class="planning-resource-empty">Aucun collaborateur</div>';
+  const resLabel=$("planningResourceSummary");if(resLabel)resLabel.textContent=selectedIds.size?`${selectedIds.size} collaborateur${selectedIds.size>1?"s":""} sélectionné${selectedIds.size>1?"s":""}`:"Tous les collaborateurs";
+  let resources=teamCandidates.filter(r=>{const id=Number(r.id),t=norm(F(r,"Equipe_Code","Equipe","equipe")),name=norm(F(r,"Nom","nom")),mail=email(F(r,"Email","email"));return (!selectedIds.size||selectedIds.has(id))&&(!q||`${name} ${mail} ${t}`.toLowerCase().includes(q));});
   const byResource=new Map();
-  for(const row of S.planningRows){
-    const id=rid(F(row,"Ressource")); if(!id)continue;
-    const iso=planningIsoDate(F(row,"Date")); if(!dates.includes(iso))continue;
-    if(!byResource.has(id))byResource.set(id,new Map());byResource.get(id).set(iso,row);
-  }
+  for(const row of S.planningRows){const id=rid(F(row,"Ressource"));if(!id)continue;const iso=planningIsoDate(F(row,"Date"));if(!dates.includes(iso))continue;if(!byResource.has(id))byResource.set(id,new Map());byResource.get(id).set(iso,row);}
   const forecastByResource=forecastMapForDates(dates);
-  let resources=(S.resources||[]).filter(r=>F(r,"Actif","actif")!==false);
-  resources=resources.filter(r=>{
-    const t=norm(F(r,"Equipe_Code","Equipe","equipe"));const name=norm(F(r,"Nom","nom"));const mail=email(F(r,"Email","email"));
-    const allowedTeam=canSeeAllTeams?(!team||t===team):(ownTeam?t===ownTeam:Number(r.id)===Number(S.person?.id||0));
-    return allowedTeam&&(!q||`${name} ${mail} ${t}`.toLowerCase().includes(q));
-  }).sort((a,b)=>norm(F(a,"Nom")).localeCompare(norm(F(b,"Nom"),"fr")));
+  const resourceIds=resources.map(r=>Number(r.id));
   const count=$("planningCount");if(count)count.textContent=`${resources.length} ressource${resources.length>1?"s":""} affichée${resources.length>1?"s":""}`;
-  const forecastCount=$("planningForecastCount");
-  if(forecastCount){
-    const total=forecastYearCount();
-    forecastCount.classList.toggle("hidden",total===null);
-    if(total!==null)forecastCount.textContent=`Absences prévisionnelles ${localIsoToday().slice(0,4)} : ${total} jour${total>1?"s":""}`;
-  }
-  const presenceRate=$("planningPresenceRate");
-  if(presenceRate){
-    const stats=annualPresenceRateGlobal(),year=localIsoToday().slice(0,4);
-    presenceRate.textContent=stats.rate===null?`Taux de présence ${year} : —`:`Taux de présence ${year} : ${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;
-    presenceRate.title=`${stats.worked} jour(s) travaillé(s) / ${stats.total} jour(s) classé(s) selon ${T.presenceMap}`;
-  }
+  const forecastCount=$("planningForecastCount");if(forecastCount){const total=periodForecastCount(resourceIds,dates);forecastCount.classList.toggle("hidden",total===null);if(total!==null){forecastCount.textContent=`Absences prévisionnelles : ${total} jour${total>1?"s":""}`;forecastCount.title=`Sur la période affichée : ${frenchDateShort(start)} – ${frenchDateShort(end)}`;}}
+  const presenceRate=$("planningPresenceRate");if(presenceRate){const stats=periodConfirmedStats(resourceIds,dates);presenceRate.textContent=stats.rate===null?"Taux de présence : —":`Taux de présence : ${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;presenceRate.title=`${stats.worked} jour(s) travaillé(s) / ${stats.total} jour(s) classé(s) sur la période affichée selon ${T.presenceMap}`;}
   const head=$("planningHead");if(head)head.innerHTML='<th class="sticky-col resource-col">Ressource</th><th class="sticky-col team-col">Équipe</th>'+dates.map(d=>{const h=frenchDayHeader(d);return `<th class="planning-day ${h.weekend?"weekend":""}"><span>${h.dow}</span><strong>${h.day}</strong></th>`}).join("");
   const body=$("planningBody");if(body)body.innerHTML=resources.length?resources.map(r=>{
-    const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,teamName=norm(F(r,"Equipe_Code","Equipe"))||"—";
-    const initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase();
-    const canSeeDetails=canSeePlanningMotifDetails(id);
-    const cells=dates.map(d=>{
-      const row=byResource.get(id)?.get(d);const h=frenchDayHeader(d);const display=planningDisplayForRow(row);
-      const forecastRequests=forecastByResource.get(id)?.get(d)||[];
-      const showWorked=$("planningShowWorked")?.checked!==false;
-      const showAbsence=$("planningShowAbsence")?.checked!==false;
-      const showForecast=$("planningShowForecast")?.checked!==false;
-      let code="";
-      let usingForecast=false;
-      if(forecastRequests.length&&showForecast){code="AP";usingForecast=true;}
-      else if(display.code==="P"&&showWorked)code="P";
-      else if(display.code==="A"&&showAbsence)code="A";
-      let title="Aucune donnée synchronisée";
-      if(usingForecast){
-        if(canSeeDetails){
-          const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");
-          title=`Absence prévisionnelle · ${details}`;
-        }else title="Absence prévisionnelle";
-      }else if(row){
-        if(canSeeDetails){
-          const motifCode=norm(F(row,"Motif_Code"));
-          const original=[norm(F(row,"Libelle")),motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);
-          title=[display.reason,...original].filter(Boolean).join(" · ")||"Donnée synchronisée";
-        }else{
-          title=code?display.reason:"Aucune information de présence affichable";
-        }
-      }
-      let motifColor="";
-      if(canSeeDetails&&code){
-        if(usingForecast){
-          const motifIds=forecastRequests.map(req=>rid(F(req,"Motif"))).filter(Boolean);
-          if(motifIds.length===1)motifColor=presenceColorForMotif(motifIds[0]);
-        }else if(row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));
-      }
-      const chipStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";
-      return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}"${chipStyle}>${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;
-    }).join("");
+    const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,teamName=norm(F(r,"Equipe_Code","Equipe"))||"—",initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase(),canSeeDetails=canSeePlanningMotifDetails(id);
+    const cells=dates.map(d=>{const row=byResource.get(id)?.get(d),h=frenchDayHeader(d),display=planningDisplayForRow(row),forecastRequests=forecastByResource.get(id)?.get(d)||[],showWorked=$("planningShowWorked")?.checked!==false,showAbsence=$("planningShowAbsence")?.checked!==false,showForecast=$("planningShowForecast")?.checked!==false;let code="",usingForecast=false;if(forecastRequests.length&&showForecast){code="AP";usingForecast=true;}else if(display.code==="P"&&showWorked)code="P";else if(display.code==="A"&&showAbsence)code="A";let title="Aucune donnée synchronisée";if(usingForecast){if(canSeeDetails){const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");title=`Absence prévisionnelle · ${details}`;}else title="Absence prévisionnelle";}else if(row){if(canSeeDetails){const motifCode=norm(F(row,"Motif_Code")),original=[norm(F(row,"Libelle")),motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);title=[display.reason,...original].filter(Boolean).join(" · ")||"Donnée synchronisée";}else title=code?display.reason:"Aucune information de présence affichable";}let motifColor="";if(canSeeDetails&&code){if(usingForecast){const motifIds=forecastRequests.map(req=>rid(F(req,"Motif"))).filter(Boolean);if(motifIds.length===1)motifColor=presenceColorForMotif(motifIds[0]);}else if(row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));}const chipStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}"${chipStyle}>${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;}).join("");
     return `<tr><td class="sticky-col resource-col"><div class="resource-name"><span class="resource-avatar">${esc(initials||"R")}</span><strong>${esc(name)}</strong><button type="button" class="resource-calendar-btn" data-annual-resource="${id}" title="Voir le calendrier annuel de ${esc(name)}" aria-label="Voir le calendrier annuel de ${esc(name)}">▦</button></div></td><td class="sticky-col team-col" title="${esc(teamName)}">${esc(teamName)}</td>${cells}</tr>`;
-  }).join(""):`<tr><td colspan="17" class="planning-empty">Aucune présence synchronisée sur cette période.</td></tr>`;
-  const latest=(S.planningRows||[]).map(r=>Number(F(r,"Derniere_Sync")||0)).filter(Boolean).sort((a,b)=>b-a)[0];
-  const sync=$("planningSync");if(sync)sync.textContent=latest?`Synchronisé · ${new Date(latest*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:"En attente de synchronisation";
+  }).join(""):`<tr><td colspan="${dates.length+2}" class="planning-empty">Aucune présence synchronisée sur cette période.</td></tr>`;
+  const latest=(S.planningRows||[]).map(r=>Number(F(r,"Derniere_Sync")||0)).filter(Boolean).sort((a,b)=>b-a)[0],sync=$("planningSync");if(sync)sync.textContent=latest?`Synchronisé · ${new Date(latest*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:"En attente de synchronisation";
 }
+
 function shiftPlanning(days){S.planningStart=addDaysIso(S.planningStart||localIsoToday(),days);renderPlanning()}
 function setPlanningStartDate(value){
   const v=norm(value);
@@ -1572,6 +1639,9 @@ async function boot(){
   $("labelsSearch").oninput=e=>renderLabelsManager(e.target.value);
   $("resetAllLabels").onclick=()=>resetAllLabels().catch(fatal);
   if($("initMenuOrderBtn")) $("initMenuOrderBtn").onclick=()=>initMenuOrderTable().catch(fatal);
+  if($("initPlanningParamsBtn")) $("initPlanningParamsBtn").onclick=()=>initPlanningParamsTable().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
+  if($("savePlanningParamsBtn")) $("savePlanningParamsBtn").onclick=()=>savePlanningParams().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
+  if($("planningWeekChoices")) $("planningWeekChoices").addEventListener("change",()=>{const vals=[...document.querySelectorAll('#planningWeekChoices input[type="checkbox"]:checked')].map(x=>Number(x.value)).sort((a,b)=>a-b);const sel=$("planningDefaultWeeks");if(sel&&vals.length){const cur=Number(sel.value);sel.innerHTML=vals.map(n=>`<option value="${n}">${n} semaine${n>1?"s":""}</option>`).join("");sel.value=String(vals.includes(cur)?cur:vals[0]);}});
   if($("initSyncParamsBtn")) $("initSyncParamsBtn").onclick=()=>initSyncParamsTable().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger"));
   if($("refreshSyncParamsBtn")) $("refreshSyncParamsBtn").onclick=()=>loadSyncParams().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger"));
   if($("initSyncRequestsBtn")) $("initSyncRequestsBtn").onclick=()=>initSyncRequestsTable().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger"));
@@ -1591,8 +1661,11 @@ async function boot(){
   if($("planningShowAbsence")) $("planningShowAbsence").onchange=()=>renderPlanning();
   if($("planningShowForecast")) $("planningShowForecast").onchange=()=>renderPlanning();
   if($("planningStartDate")) $("planningStartDate").onchange=e=>setPlanningStartDate(e.target.value);
-  if($("planningPrev")) $("planningPrev").onclick=()=>shiftPlanning(-15);
-  if($("planningNext")) $("planningNext").onclick=()=>shiftPlanning(15);
+  if($("planningPrev")) $("planningPrev").onclick=()=>shiftPlanning(-Math.max(7,Number(S.planningWeeks||2)*7));
+  if($("planningNext")) $("planningNext").onclick=()=>shiftPlanning(Math.max(7,Number(S.planningWeeks||2)*7));
+  if($("planningWeeks")) $("planningWeeks").onchange=e=>{S.planningWeeks=Number(e.target.value)||planningDefaultWeeks();renderPlanning();};
+  if($("planningResourceOptions")) $("planningResourceOptions").addEventListener("change",e=>{if(e.target.matches('input[type="checkbox"]')){S.planningSelectedResourceIds=[...$("planningResourceOptions").querySelectorAll('input[type="checkbox"]:checked')].map(x=>Number(x.value));renderPlanning();}});
+  if($("planningResourcesAll")) $("planningResourcesAll").onclick=()=>{S.planningSelectedResourceIds=[];renderPlanning();};
   if($("planningToday")) $("planningToday").onclick=()=>resetPlanningToday();
   if($("planningRefresh")) $("planningRefresh").onclick=()=>loadPlanning().catch(showPlanningError);
   if($("planningBody")) $("planningBody").addEventListener("click",e=>{
@@ -1613,7 +1686,7 @@ async function boot(){
   await syncAll("startup")
   await identify();
   await detectOwner();
-  await load();await loadLabels();await loadMenuOrder();await loadSyncParams();await loadSyncRequests();
+  await load();await loadLabels();await loadMenuOrder();await loadPlanningParams().catch(()=>{});await loadSyncParams();await loadSyncRequests();
   await loadManagerContext().catch(e=>console.warn("Mode manager:",e));
   showView("home");
 }

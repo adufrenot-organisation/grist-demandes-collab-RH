@@ -30,6 +30,8 @@ schemas={
 
 "PARAM_MENU_ORDRE":[
  {"id":"Section","fields":{"type":"Text"}},{"id":"View","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},{"id":"Ordre","fields":{"type":"Int"}}],
+"PARAM_PLANNING":[
+ {"id":"Cle","fields":{"type":"Text"}},{"id":"Valeur","fields":{"type":"Text"}},{"id":"Commentaire","fields":{"type":"Text"}}],
 "PLANNING_PRESENCE":[
  {"id":"Ressource","fields":{"type":"Ref:Ressources"}},{"id":"Date","fields":{"type":"Date"}},
  {"id":"Statut","fields":{"type":"Text"}},{"id":"Libelle","fields":{"type":"Text"}},
