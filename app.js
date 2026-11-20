@@ -1,6 +1,6 @@
-const VERSION="V1.78";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[]};
+const VERSION="V1.79";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS"};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 const DEBUG_KEY="rh_debug_enabled";
 function debugIsEnabled(){
@@ -558,7 +558,7 @@ async function initPlanningParamsTable(){
   ];
   const actions=defs.filter(x=>!keys.has(x[0])).map(x=>["AddRecord",T.planningParams,null,{Cle:x[0],Valeur:x[1],Commentaire:x[2]}]);
   if(actions.length)await grist.docApi.applyUserActions(actions);
-  await loadPlanningParams();showSyncAdminMsg("planningParamsMsg","PARAM_PLANNING initialisée / complétée.");
+  await ensurePlanningKpiTable();await loadPlanningParams();await loadPlanningKpiRules();showSyncAdminMsg("planningParamsMsg","Paramètres planning initialisés / complétés.");
 }
 async function loadPlanningParams(){
   const exists=await gristTableExists(T.planningParams);
@@ -597,6 +597,100 @@ function renderPlanningWeekSelect(){
   sel.innerHTML=opts.map(n=>`<option value="${n}">${n} semaine${n>1?"s":""}</option>`).join("");
   sel.value=String(current);
 }
+
+function planningCurrentRole(){
+  if(S.isOwner)return "OWNER";
+  if(S.isAdmin)return "ADMIN";
+  if(isPmo())return "PMO";
+  if(currentProfile()==="MANAGER"||(S.managedResources||[]).length||(S.managerLinks||[]).some(x=>F(x,"Actif")!==false))return "MANAGER";
+  return "COLLABORATEUR";
+}
+const PLANNING_KPI_DEFS=[
+  ["RESSOURCES","Ressources affichées"],
+  ["ABSENCES_PREVISIONNELLES","Absences prévisionnelles"],
+  ["TAUX_PRESENCE_PERIODE","Taux de présence période"],
+  ["PRESENCE_ANNUELLE","Présence annuelle"],
+  ["ABSENCE_ANNUELLE","Absences annuelles"],
+  ["TAUX_PRESENCE_ANNUEL","Taux de présence annuel"],
+  ["PAR_RESSOURCES","Bouton Par ressources"]
+];
+const PLANNING_ROLE_DEFS=["COLLABORATEUR","MANAGER","PMO","ADMIN","OWNER"];
+async function ensurePlanningKpiTable(){
+  if(!(S.isAdmin||S.isOwner))return false;
+  if(!await gristTableExists(T.planningKpis)){
+    await grist.docApi.applyUserActions([["AddTable",T.planningKpis,[
+      {id:"Indicateur",type:"Text"},{id:"Role",type:"Text"},{id:"Ressource",type:"Ref:Ressources"},{id:"Visible",type:"Bool"},{id:"Commentaire",type:"Text"}
+    ]]]);
+  }
+  const existing=await table(T.planningKpis),keys=new Set(existing.map(r=>`${norm(F(r,"Indicateur")).toUpperCase()}|${norm(F(r,"Role")).toUpperCase()}|${Number(rid(F(r,"Ressource"))||0)}`));
+  const actions=[];
+  for(const [k,label] of PLANNING_KPI_DEFS){
+    for(const role of PLANNING_ROLE_DEFS){
+      const key=`${k}|${role}|0`;if(keys.has(key))continue;
+      let visible=true;
+      if(k==="ABSENCES_PREVISIONNELLES"&&!['PMO','ADMIN','OWNER'].includes(role))visible=false;
+      if(k==="PAR_RESSOURCES"&&role==="COLLABORATEUR")visible=false;
+      actions.push(["AddRecord",T.planningKpis,null,{Indicateur:k,Role:role,Ressource:0,Visible:visible,Commentaire:`${label} · règle par rôle`}]);
+    }
+  }
+  if(actions.length)await grist.docApi.applyUserActions(actions);
+  return true;
+}
+async function loadPlanningKpiRules(){
+  const exists=await gristTableExists(T.planningKpis);
+  S.planningKpiReady=exists;S.planningKpiRules=exists?await table(T.planningKpis):[];
+  if($('planningKpiSetupText'))$('planningKpiSetupText').innerHTML=exists?`<strong>${T.planningKpis}</strong> disponible · ${S.planningKpiRules.length} règle(s).`:`<strong>${T.planningKpis}</strong> absente.`;
+  $('planningKpiManager')?.classList.toggle('hidden',!exists);
+  if(exists&&(S.isAdmin||S.isOwner))renderPlanningKpiAdmin();
+}
+function planningKpiVisible(indicator){
+  const key=norm(indicator).toUpperCase(),role=planningCurrentRole(),resourceId=Number(S.person?.id||0);
+  const rules=(S.planningKpiRules||[]).filter(r=>norm(F(r,"Indicateur")).toUpperCase()===key);
+  const resourceRule=rules.find(r=>Number(rid(F(r,"Ressource"))||0)===resourceId && resourceId>0);
+  if(resourceRule)return F(resourceRule,"Visible")!==false;
+  const roleRule=rules.find(r=>!Number(rid(F(r,"Ressource"))||0)&&norm(F(r,"Role")).toUpperCase()===role);
+  return roleRule?F(roleRule,"Visible")!==false:true;
+}
+function applyPlanningKpiVisibility(){
+  const map={RESSOURCES:'planningCount',ABSENCES_PREVISIONNELLES:'planningForecastCount',TAUX_PRESENCE_PERIODE:'planningPresenceRate',PRESENCE_ANNUELLE:'planningAnnualWorked',ABSENCE_ANNUELLE:'planningAnnualAbsence',TAUX_PRESENCE_ANNUEL:'planningAnnualPresenceRate',PAR_RESSOURCES:'planningAnnualByResourceBtn'};
+  for(const [k,id] of Object.entries(map)){const el=$(id);if(el)el.classList.toggle('kpi-hidden-by-rule',!planningKpiVisible(k));}
+}
+function renderPlanningKpiAdmin(){
+  const body=$('planningKpiRoleRows');if(!body)return;
+  const rows=[];
+  for(const [k,label] of PLANNING_KPI_DEFS){
+    const cells=PLANNING_ROLE_DEFS.map(role=>{const r=(S.planningKpiRules||[]).find(x=>norm(F(x,'Indicateur')).toUpperCase()===k&&norm(F(x,'Role')).toUpperCase()===role&&!Number(rid(F(x,'Ressource'))||0));return `<td><input type="checkbox" data-kpi-rule-id="${r?.id||''}" data-kpi="${k}" data-role="${role}" ${r&&F(r,'Visible')===false?'':'checked'}></td>`}).join('');
+    rows.push(`<tr><td><strong>${esc(label)}</strong><small class="kpi-code">${esc(k)}</small></td>${cells}</tr>`);
+  }
+  body.innerHTML=rows.join('');
+  const sel=$('planningKpiResourceSelect');if(sel)sel.innerHTML='<option value="">— Ressource —</option>'+(S.resources||[]).filter(r=>F(r,'Actif','actif')!==false).sort((a,b)=>resLabel(a).localeCompare(resLabel(b),'fr')).map(r=>`<option value="${r.id}">${esc(resLabel(r))}</option>`).join('');
+  renderPlanningKpiOverrides();
+}
+function renderPlanningKpiOverrides(){
+  const body=$('planningKpiOverrideRows');if(!body)return;
+  const overrides=(S.planningKpiRules||[]).filter(r=>Number(rid(F(r,'Ressource'))||0)>0);
+  body.innerHTML=overrides.map(r=>{const rr=resourceById(rid(F(r,'Ressource')));const def=PLANNING_KPI_DEFS.find(x=>x[0]===norm(F(r,'Indicateur')).toUpperCase());return `<tr><td>${esc(rr?resLabel(rr):'Ressource #'+rid(F(r,'Ressource')))}</td><td>${esc(def?.[1]||F(r,'Indicateur')||'')}</td><td>${F(r,'Visible')===false?'Masqué':'Visible'}</td><td><button type="button" class="table-action" data-kpi-override-remove="${r.id}">Retirer</button></td></tr>`}).join('')||'<tr><td colspan="4">Aucune dérogation par ressource.</td></tr>';
+  body.querySelectorAll('[data-kpi-override-remove]').forEach(b=>b.onclick=()=>removePlanningKpiOverride(Number(b.dataset.kpiOverrideRemove)).catch(e=>showSyncAdminMsg('planningParamsMsg',e?.message||String(e),'danger')));
+}
+async function savePlanningKpiRoleRules(){
+  if(!(S.isAdmin||S.isOwner))return;
+  const tbl=grist.getTable(T.planningKpis);
+  for(const cb of document.querySelectorAll('#planningKpiRoleRows input[type="checkbox"]')){
+    const id=Number(cb.dataset.kpiRuleId||0),fields={Indicateur:cb.dataset.kpi,Role:cb.dataset.role,Ressource:0,Visible:cb.checked,Commentaire:'Règle par rôle'};
+    if(id)await tbl.update({id,fields});else await tbl.create({fields});
+  }
+  await loadPlanningKpiRules();renderPlanning();showSyncAdminMsg('planningParamsMsg','Visibilité des indicateurs enregistrée.');
+}
+async function addPlanningKpiOverride(){
+  if(!(S.isAdmin||S.isOwner))return;
+  const resourceId=Number($('planningKpiResourceSelect')?.value||0),indicator=norm($('planningKpiIndicatorSelect')?.value).toUpperCase(),visible=$('planningKpiOverrideVisible')?.value!=='false';
+  if(!resourceId||!indicator)throw new Error('Sélectionnez une ressource et un indicateur.');
+  const tbl=grist.getTable(T.planningKpis),old=(S.planningKpiRules||[]).find(r=>Number(rid(F(r,'Ressource'))||0)===resourceId&&norm(F(r,'Indicateur')).toUpperCase()===indicator);
+  const fields={Indicateur:indicator,Role:'',Ressource:resourceId,Visible:visible,Commentaire:'Dérogation ressource'};
+  if(old)await tbl.update({id:old.id,fields});else await tbl.create({fields});
+  await loadPlanningKpiRules();showSyncAdminMsg('planningParamsMsg','Dérogation ressource enregistrée.');
+}
+async function removePlanningKpiOverride(id){await grist.docApi.applyUserActions([["RemoveRecord",T.planningKpis,id]]);await loadPlanningKpiRules();renderPlanning();}
 
 async function initSyncRequestsTable(){
   if(!(S.isAdmin||S.isOwner))return;
@@ -997,6 +1091,13 @@ function presenceTypeForMotifCode(code){
   const motif=(S.motifs||[]).find(m=>norm(F(m,"Code")).toUpperCase()===wanted);
   return motif?presenceTypeForMotif(motif.id):"";
 }
+function planningOriginalMotifLabel(row){
+  if(!row)return "";
+  const direct=norm(F(row,"Libelle","Motif_Libelle","Motif"));if(direct)return direct;
+  const code=norm(F(row,"Motif_Code")).toUpperCase();if(!code)return "";
+  const motif=(S.motifs||[]).find(m=>norm(F(m,"Code")).toUpperCase()===code);
+  return motif?norm(F(motif,"Libelle","Nom","Code")):code;
+}
 function planningDisplayForRow(row){
   if(!row)return {code:"",type:"",reason:"Aucune donnée synchronisée"};
   const motifCode=norm(F(row,"Motif_Code"));
@@ -1069,7 +1170,6 @@ function periodConfirmedStats(resourceIds,dates){
   const total=worked+absence;return {worked,absence,total,rate:total?worked*100/total:null};
 }
 function periodForecastCount(resourceIds,dates){
-  const allowed=S.isOwner||S.isAdmin||isPmo();if(!allowed)return null;
   const ids=new Set((resourceIds||[]).map(Number).filter(Boolean)),wanted=new Set(dates||[]),unique=new Set();
   const forecast=forecastMapForDates(dates||[]);
   for(const resourceId of ids){
@@ -1189,8 +1289,8 @@ function renderAnnualPresence(){
         }else tip="Absence prévisionnelle";
       }else if(base){
         if(canSeeDetails){
-          const row=base.row,original=[norm(F(row,"Libelle")),norm(F(row,"Motif_Code")),norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);
-          tip=[base.display.reason,...original].filter(Boolean).join(" · ");
+          const row=base.row,original=[planningOriginalMotifLabel(row),norm(F(row,"Motif_Code")),norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);
+          tip=original.join(" · ")||"Donnée synchronisée";
         }else tip=base.display.reason;
       }
       const cls=code?`day-${code.toLowerCase()}`:"";
@@ -1237,7 +1337,9 @@ function canSeePlanningMotifDetails(resourceId){
   if(!id)return false;
   if(S.isOwner||S.isAdmin)return true;
   if(id===Number(S.person?.id||0))return true;
-  // Manager : détails réels uniquement pour les ressources explicitement rattachées.
+  // Un profil MANAGER voit les motifs réels de toutes les ressources présentes dans son planning.
+  // Le planning lui-même borne déjà son périmètre à son équipe / ses droits visibles.
+  if(currentProfile()==="MANAGER")return true;
   if((S.managedResources||[]).some(x=>Number(x.id)===id))return true;
   return (S.managerLinks||[]).some(x=>F(x,"Actif")!==false&&Number(rid(F(x,"Ressource")))===id);
 }
@@ -1264,6 +1366,7 @@ async function loadPlanning(){
   S.planningRows=exists?await table(T.planning):[];
   await loadPresenceMappings();
   await loadPlanningParams().catch(()=>{});
+  await loadPlanningKpiRules().catch(()=>{});
   if(!S.planningStart)S.planningStart=localIsoToday();
   renderPlanning();
 }
@@ -1314,10 +1417,11 @@ function renderPlanning(){
   const annualAbsence=$("planningAnnualAbsence");if(annualAbsence){annualAbsence.textContent=`Absences : ${annualStats.absence} jour${annualStats.absence>1?"s":""}`;annualAbsence.title=`Jours classés ABSENCE sur l’année ${annualYear}, hors week-ends et jours fériés`;}
   const annualRate=$("planningAnnualPresenceRate");if(annualRate){annualRate.textContent=annualStats.rate===null?"Taux annuel : —":`Taux annuel : ${annualStats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;annualRate.title=`${annualStats.worked} jour(s) travaillé(s) / ${annualStats.total} jour(s) classé(s) sur toute l’année ${annualYear}`;}
   renderPlanningAnnualByResource(resources,annualYear);
+  applyPlanningKpiVisibility();
   const head=$("planningHead");if(head)head.innerHTML='<th class="sticky-col resource-col">Ressource</th><th class="sticky-col team-col">Équipe</th>'+dates.map(d=>{const h=frenchDayHeader(d);return `<th class="planning-day ${h.weekend?"weekend":""}"><span>${h.dow}</span><strong>${h.day}</strong></th>`}).join("");
   const body=$("planningBody");if(body)body.innerHTML=resources.length?resources.map(r=>{
     const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,teamName=norm(F(r,"Equipe_Code","Equipe"))||"—",initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase(),canSeeDetails=canSeePlanningMotifDetails(id);
-    const cells=dates.map(d=>{const row=byResource.get(id)?.get(d),h=frenchDayHeader(d),display=planningDisplayForRow(row),forecastRequests=forecastByResource.get(id)?.get(d)||[],showWorked=$("planningShowWorked")?.checked!==false,showAbsence=$("planningShowAbsence")?.checked!==false,showForecast=$("planningShowForecast")?.checked!==false;let code="",usingForecast=false;if(forecastRequests.length&&showForecast){code="AP";usingForecast=true;}else if(display.code==="P"&&showWorked)code="P";else if(display.code==="A"&&showAbsence)code="A";let title="Aucune donnée synchronisée";if(usingForecast){if(canSeeDetails){const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");title=`Absence prévisionnelle · ${details}`;}else title="Absence prévisionnelle";}else if(row){if(canSeeDetails){const motifCode=norm(F(row,"Motif_Code")),original=[norm(F(row,"Libelle")),motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);title=[display.reason,...original].filter(Boolean).join(" · ")||"Donnée synchronisée";}else title=code?display.reason:"Aucune information de présence affichable";}let motifColor="";if(canSeeDetails&&code){if(usingForecast){const motifIds=forecastRequests.map(req=>rid(F(req,"Motif"))).filter(Boolean);if(motifIds.length===1)motifColor=presenceColorForMotif(motifIds[0]);}else if(row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));}const chipStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}"${chipStyle}>${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;}).join("");
+    const cells=dates.map(d=>{const row=byResource.get(id)?.get(d),h=frenchDayHeader(d),display=planningDisplayForRow(row),forecastRequests=forecastByResource.get(id)?.get(d)||[],showWorked=$("planningShowWorked")?.checked!==false,showAbsence=$("planningShowAbsence")?.checked!==false,showForecast=$("planningShowForecast")?.checked!==false;let code="",usingForecast=false;if(forecastRequests.length&&showForecast){code="AP";usingForecast=true;}else if(display.code==="P"&&showWorked)code="P";else if(display.code==="A"&&showAbsence)code="A";let title="Aucune donnée synchronisée";if(usingForecast){if(canSeeDetails){const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");title=`Absence prévisionnelle · ${details}`;}else title="Absence prévisionnelle";}else if(row){if(canSeeDetails){const motifCode=norm(F(row,"Motif_Code")),motifLabel=planningOriginalMotifLabel(row),original=[motifLabel,motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);title=original.join(" · ")||"Donnée synchronisée";}else title=code?display.reason:"Aucune information de présence affichable";}let motifColor="";if(canSeeDetails&&code){if(usingForecast){const motifIds=forecastRequests.map(req=>rid(F(req,"Motif"))).filter(Boolean);if(motifIds.length===1)motifColor=presenceColorForMotif(motifIds[0]);}else if(row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));}const chipStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}"${chipStyle}>${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;}).join("");
     return `<tr><td class="sticky-col resource-col"><div class="resource-name"><span class="resource-avatar">${esc(initials||"R")}</span><strong>${esc(name)}</strong><button type="button" class="resource-calendar-btn" data-annual-resource="${id}" title="Voir le calendrier annuel de ${esc(name)}" aria-label="Voir le calendrier annuel de ${esc(name)}">▦</button></div></td><td class="sticky-col team-col" title="${esc(teamName)}">${esc(teamName)}</td>${cells}</tr>`;
   }).join(""):`<tr><td colspan="${dates.length+2}" class="planning-empty">Aucune présence synchronisée sur cette période.</td></tr>`;
   const latest=(S.planningRows||[]).map(r=>Number(F(r,"Derniere_Sync")||0)).filter(Boolean).sort((a,b)=>b-a)[0],sync=$("planningSync");if(sync)sync.textContent=latest?`Synchronisé · ${new Date(latest*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:"En attente de synchronisation";
@@ -1674,6 +1778,9 @@ async function boot(){
   if($("initMenuOrderBtn")) $("initMenuOrderBtn").onclick=()=>initMenuOrderTable().catch(fatal);
   if($("initPlanningParamsBtn")) $("initPlanningParamsBtn").onclick=()=>initPlanningParamsTable().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
   if($("savePlanningParamsBtn")) $("savePlanningParamsBtn").onclick=()=>savePlanningParams().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
+  if($("initPlanningKpiBtn")) $("initPlanningKpiBtn").onclick=()=>ensurePlanningKpiTable().then(loadPlanningKpiRules).catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
+  if($("savePlanningKpiRolesBtn")) $("savePlanningKpiRolesBtn").onclick=()=>savePlanningKpiRoleRules().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
+  if($("addPlanningKpiOverrideBtn")) $("addPlanningKpiOverrideBtn").onclick=()=>addPlanningKpiOverride().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
   if($("planningWeekChoices")) $("planningWeekChoices").addEventListener("change",()=>{const vals=[...document.querySelectorAll('#planningWeekChoices input[type="checkbox"]:checked')].map(x=>Number(x.value)).sort((a,b)=>a-b);const sel=$("planningDefaultWeeks");if(sel&&vals.length){const cur=Number(sel.value);sel.innerHTML=vals.map(n=>`<option value="${n}">${n} semaine${n>1?"s":""}</option>`).join("");sel.value=String(vals.includes(cur)?cur:vals[0]);}});
   if($("initSyncParamsBtn")) $("initSyncParamsBtn").onclick=()=>initSyncParamsTable().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger"));
   if($("refreshSyncParamsBtn")) $("refreshSyncParamsBtn").onclick=()=>loadSyncParams().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger"));
@@ -1722,7 +1829,7 @@ async function boot(){
   await syncAll("startup")
   await identify();
   await detectOwner();
-  await load();await loadLabels();await loadMenuOrder();await loadPlanningParams().catch(()=>{});await loadSyncParams();await loadSyncRequests();
+  await load();await loadLabels();await loadMenuOrder();await loadPlanningParams().catch(()=>{});await loadPlanningKpiRules().catch(()=>{});await loadSyncParams();await loadSyncRequests();
   await loadManagerContext().catch(e=>console.warn("Mode manager:",e));
   showView("home");
 }

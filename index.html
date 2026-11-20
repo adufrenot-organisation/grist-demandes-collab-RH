@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.78</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.79</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.78</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.79</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -187,6 +187,14 @@
   <div class="section-head"><div><h3>Durées disponibles</h3><p>Sélectionnez les choix de durée visibles dans le planning. De 1 à 8 semaines.</p></div></div>
   <div id="planningWeekChoices" class="planning-week-choices"></div>
   <div class="planning-default-row"><label>Durée par défaut<select id="planningDefaultWeeks"></select></label><button id="savePlanningParamsBtn" class="primary" type="button">Enregistrer</button></div>
+ </div>
+ <div class="card planning-kpi-admin">
+  <div class="section-head"><div><h3>Visibilité des indicateurs</h3><p>Définissez les indicateurs visibles selon le rôle connecté. Une dérogation par ressource est prioritaire.</p><p id="planningKpiSetupText">Vérification…</p></div><button id="initPlanningKpiBtn" class="secondary" type="button">Initialiser / compléter</button></div>
+  <div id="planningKpiManager" class="hidden">
+   <div class="tablewrap planning-kpi-role-table"><table><thead><tr><th>Indicateur</th><th>Collaborateur</th><th>Manager</th><th>PMO</th><th>Admin</th><th>Owner</th></tr></thead><tbody id="planningKpiRoleRows"></tbody></table></div>
+   <div class="actions"><button id="savePlanningKpiRolesBtn" class="primary" type="button">Enregistrer les rôles</button></div>
+   <div class="planning-kpi-overrides"><h4>Dérogations par ressource</h4><p class="muted">Exemple : afficher un indicateur à une ressource même si son rôle le masque.</p><div class="planning-kpi-override-form"><label>Ressource<select id="planningKpiResourceSelect"></select></label><label>Indicateur<select id="planningKpiIndicatorSelect"><option value="RESSOURCES">Ressources affichées</option><option value="ABSENCES_PREVISIONNELLES">Absences prévisionnelles</option><option value="TAUX_PRESENCE_PERIODE">Taux de présence période</option><option value="PRESENCE_ANNUELLE">Présence annuelle</option><option value="ABSENCE_ANNUELLE">Absences annuelles</option><option value="TAUX_PRESENCE_ANNUEL">Taux de présence annuel</option><option value="PAR_RESSOURCES">Bouton Par ressources</option></select></label><label>Affichage<select id="planningKpiOverrideVisible"><option value="true">Visible</option><option value="false">Masqué</option></select></label><button id="addPlanningKpiOverrideBtn" class="secondary" type="button">Ajouter / remplacer</button></div><div class="tablewrap"><table><thead><tr><th>Ressource</th><th>Indicateur</th><th>Affichage</th><th></th></tr></thead><tbody id="planningKpiOverrideRows"></tbody></table></div></div>
+  </div>
  </div>
 </section>
 
