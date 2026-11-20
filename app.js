@@ -1,4 +1,4 @@
-const VERSION="V1.75";
+const VERSION="V1.76";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[]};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -531,7 +531,7 @@ async function saveSyncParam(id){
   const input=document.querySelector(`[data-sync-param="${id}"]`);if(!input)return;await grist.getTable(T.syncParams).update({id,fields:{Valeur:input.value.trim()}});await loadSyncParams();showSyncAdminMsg('syncParamsMsg','Paramètre enregistré.');
 }
 
-// V1.75 — paramétrage des durées du planning
+// V1.76 — paramétrage des durées du planning
 function planningParamValue(key,fallback=""){
   const row=(S.planningParams||[]).find(r=>norm(F(r,"Cle"))===key);
   return row?norm(F(row,"Valeur")):fallback;
@@ -1281,6 +1281,11 @@ function renderPlanning(){
   const count=$("planningCount");if(count)count.textContent=`${resources.length} ressource${resources.length>1?"s":""} affichée${resources.length>1?"s":""}`;
   const forecastCount=$("planningForecastCount");if(forecastCount){const total=periodForecastCount(resourceIds,dates);forecastCount.classList.toggle("hidden",total===null);if(total!==null){forecastCount.textContent=`Absences prévisionnelles : ${total} jour${total>1?"s":""}`;forecastCount.title=`Sur la période affichée : ${frenchDateShort(start)} – ${frenchDateShort(end)}`;}}
   const presenceRate=$("planningPresenceRate");if(presenceRate){const stats=periodConfirmedStats(resourceIds,dates);presenceRate.textContent=stats.rate===null?"Taux de présence : —":`Taux de présence : ${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;presenceRate.title=`${stats.worked} jour(s) travaillé(s) / ${stats.total} jour(s) classé(s) sur la période affichée selon ${T.presenceMap}`;}
+  const annualYear=Number(start.slice(0,4)),annualStats=annualConfirmedStats(resourceIds,annualYear);
+  const annualLabel=$("planningAnnualLabel");if(annualLabel){annualLabel.textContent=`Année ${annualYear}`;annualLabel.title=`Indicateurs calculés du 1er janvier au 31 décembre ${annualYear} sur les ressources filtrées`;}
+  const annualWorked=$("planningAnnualWorked");if(annualWorked){annualWorked.textContent=`Présence : ${annualStats.worked} jour${annualStats.worked>1?"s":""}`;annualWorked.title=`Jours classés JOUR_TRAVAILLE sur l’année ${annualYear}, hors week-ends et jours fériés`;}
+  const annualAbsence=$("planningAnnualAbsence");if(annualAbsence){annualAbsence.textContent=`Absences : ${annualStats.absence} jour${annualStats.absence>1?"s":""}`;annualAbsence.title=`Jours classés ABSENCE sur l’année ${annualYear}, hors week-ends et jours fériés`;}
+  const annualRate=$("planningAnnualPresenceRate");if(annualRate){annualRate.textContent=annualStats.rate===null?"Taux annuel : —":`Taux annuel : ${annualStats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;annualRate.title=`${annualStats.worked} jour(s) travaillé(s) / ${annualStats.total} jour(s) classé(s) sur toute l’année ${annualYear}`;}
   const head=$("planningHead");if(head)head.innerHTML='<th class="sticky-col resource-col">Ressource</th><th class="sticky-col team-col">Équipe</th>'+dates.map(d=>{const h=frenchDayHeader(d);return `<th class="planning-day ${h.weekend?"weekend":""}"><span>${h.dow}</span><strong>${h.day}</strong></th>`}).join("");
   const body=$("planningBody");if(body)body.innerHTML=resources.length?resources.map(r=>{
     const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,teamName=norm(F(r,"Equipe_Code","Equipe"))||"—",initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase(),canSeeDetails=canSeePlanningMotifDetails(id);

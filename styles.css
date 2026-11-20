@@ -747,3 +747,13 @@ main > header.app-header .header-identity{
 @media(max-width:1350px){.planning-filters{grid-template-columns:repeat(3,minmax(180px,1fr))}.planning-range-nav{justify-content:flex-start}}
 @media(max-width:850px){.planning-filters{grid-template-columns:1fr 1fr}.planning-resource-popover{min-width:260px;max-width:min(360px,90vw)}}
 @media(max-width:600px){.planning-filters{grid-template-columns:1fr}.planning-resource-popover{position:relative;top:4px;min-width:0;max-width:none;width:100%;box-shadow:none}}
+
+/* V1.76 — KPI annuels du planning, sur le même périmètre de ressources */
+.planning-metric-stack{display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-width:0}
+.planning-annual-metrics{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.planning-annual-label,.planning-annual-worked,.planning-annual-absence,.planning-annual-rate{display:inline-flex;border-radius:9px;padding:7px 10px;font-size:10px;font-weight:800;white-space:nowrap}
+.planning-annual-label{background:#f4f6f9;color:#657187;border:1px solid #dfe5ee}
+.planning-annual-worked{background:#edf8f0;color:#28723c;border:1px solid #c6e6cf}
+.planning-annual-absence{background:#fff1f2;color:#a33a4f;border:1px solid #f1c8d0}
+.planning-annual-rate{background:#f1f4ff;color:#425f9c;border:1px solid #d4ddf5}
+@media(max-width:900px){.planning-toolbar{align-items:flex-start;flex-wrap:wrap}.planning-metric-stack{width:100%}.planning-annual-metrics{width:100%}}
