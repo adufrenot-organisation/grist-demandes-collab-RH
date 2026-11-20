@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.67</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.69</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.67</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
+<div class="version version-brand">V1.71</div><div class="mark">RH</div><div><strong>Demandes RH</strong><small>Portail collaborateur</small></div></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -67,7 +67,7 @@
  <div id="planningSetup" class="card planning-setup hidden"><div class="section-head"><div><h3>Table planning absente</h3><p id="planningSetupText"></p></div><button id="initPlanningBtn" class="primary hidden">Initialiser la table</button></div><div class="setup-hint">Cette table est esclave : elle doit être alimentée par la synchronisation depuis Cockpit RH, pas modifiée par les utilisateurs.</div></div>
  <div id="planningGrid" class="hidden">
   <div class="card planning-filters"><label>Équipe<select id="planningTeam"><option value="">Toutes les équipes</option></select></label><label class="planning-search"><span>⌕</span><input id="planningSearch" type="search" placeholder="Rechercher une ressource…"></label><label class="planning-date-filter">Début de période<input id="planningStartDate" type="date" aria-label="Choisir le début de la période de 15 jours"></label><button id="planningToday" class="planning-today">Aujourd’hui</button><div class="planning-range-nav"><button id="planningPrev" class="iconbtn" title="Période précédente de 15 jours">‹</button><strong id="planningRange"></strong><button id="planningNext" class="iconbtn" title="Période suivante de 15 jours">›</button></div></div>
-  <div class="card planning-card"><div class="planning-toolbar"><div class="planning-metrics"><span id="planningCount" class="planning-count">0 ressource affichée</span><span id="planningForecastCount" class="planning-forecast-count hidden"></span></div><div class="planning-display-filters" aria-label="Filtres d’affichage du planning"><label><input id="planningShowWorked" type="checkbox" checked><span><b class="presence-chip status-p">P</b> Jours travaillés</span></label><label><input id="planningShowAbsence" type="checkbox" checked><span><b class="presence-chip status-a">A</b> Absences</span></label><label><input id="planningShowForecast" type="checkbox" checked><span><b class="presence-chip status-ap">AP</b> Absences prévisionnelles</span></label></div><div class="planning-legend"><span class="planning-map-note">Selon PARAM_MOTIFS_PRESENCE</span></div><div class="planning-actions"><span class="readonly-badge">🔒 Lecture seule</span><button id="planningRefresh" class="iconbtn" title="Actualiser le planning">↻</button></div></div><div class="planning-tablewrap"><table class="planning-table"><thead><tr id="planningHead"></tr></thead><tbody id="planningBody"></tbody></table></div></div>
+  <div class="card planning-card"><div class="planning-toolbar"><div class="planning-metrics"><span id="planningCount" class="planning-count">0 ressource affichée</span><span id="planningForecastCount" class="planning-forecast-count hidden"></span><span id="planningPresenceRate" class="planning-presence-rate">Taux de présence —</span></div><div class="planning-display-filters" aria-label="Filtres d’affichage du planning"><label><input id="planningShowWorked" type="checkbox" checked><span><b class="presence-chip status-p">P</b> Jours travaillés</span></label><label><input id="planningShowAbsence" type="checkbox" checked><span><b class="presence-chip status-a">A</b> Absences</span></label><label><input id="planningShowForecast" type="checkbox" checked><span><b class="presence-chip status-ap">AP</b> Absences prévisionnelles</span></label></div><div class="planning-legend"><span class="planning-map-note">Selon PARAM_MOTIFS_PRESENCE</span></div><div class="planning-actions"><span class="readonly-badge">🔒 Lecture seule</span><button id="planningRefresh" class="iconbtn" title="Actualiser le planning">↻</button></div></div><div class="planning-tablewrap"><table class="planning-table"><thead><tr id="planningHead"></tr></thead><tbody id="planningBody"></tbody></table></div></div>
  </div>
 </section>
 
@@ -104,6 +104,8 @@
 <section id="view-motifs" class="view adminview">
 <div class="pagehead"><div><span class="pill adminpill">RÉFÉRENTIEL LOCAL</span><h2>Motifs RH</h2><p>Catalogue propre au portail. Le Code assure la correspondance avec le Cockpit.</p></div><button id="newMotifBtn" class="primary">＋ Nouveau motif</button></div>
 <div class="card"><div class="tablewrap"><table><thead><tr><th>Code</th><th>Libellé</th><th>Description</th><th>État</th><th></th></tr></thead><tbody id="motifsRows"></tbody></table></div></div>
+
+<div id="annualPresenceModal" class="modal hidden"><div class="modalbox annual-presence-modal"><div class="modalhead"><div><span class="pill">PRÉSENCE ANNUELLE</span><h3 id="annualPresenceTitle">Calendrier de présence</h3><p id="annualPresenceSubtitle" class="modal-subtitle"></p></div><button id="closeAnnualPresence" class="iconbtn" type="button" aria-label="Fermer">×</button></div><div class="annual-presence-toolbar"><label>Année<select id="annualPresenceYear"></select></label><div class="annual-presence-kpis"><span id="annualPresenceRateKpi" class="annual-kpi rate">Taux de présence —</span><span id="annualAbsenceKpi" class="annual-kpi absence">0 jour d’absence</span></div></div><div class="annual-presence-legend"><span><b class="presence-chip status-p">P</b> Jour travaillé</span><span><b class="presence-chip status-a">A</b> Absence</span><span><b class="presence-chip status-ap">AP</b> Absence prévisionnelle</span></div><div id="annualPresenceCalendar" class="annual-calendar"></div></div></div>
 <div id="motifEditor" class="modal hidden"><div class="modalbox"><div class="modalhead"><div><span class="pill adminpill">MOTIF RH</span><h3 id="motifEditorTitle">Nouveau motif</h3></div><button id="closeMotif" class="iconbtn">×</button></div>
 <div class="formgrid"><label>Code<input id="motifCodeAdmin" maxlength="40" placeholder="Ex. CP"></label><label>Libellé<input id="motifLabelAdmin" maxlength="120" placeholder="Ex. Congés payés"></label><label class="wide">Description<textarea id="motifDescAdmin" rows="4"></textarea></label><label class="toggleline wide"><input id="motifActiveAdmin" type="checkbox" checked> Motif actif</label></div>
 <div id="motifAdminMsg" class="alert hidden"></div><div class="actions"><button id="cancelMotif" class="secondary">Annuler</button><button id="saveMotif" class="primary">Enregistrer</button></div></div></div>
@@ -116,9 +118,9 @@
   <div class="setup-hint">La correspondance est locale au portail. Un motif non configuré ne doit provoquer aucune mise à jour automatique de présence.</div>
  </div>
  <div id="presenceMapManager" class="card hidden">
-  <div class="section-head"><div><h3>Motifs RH et impact présence</h3><p>Valeurs possibles : Jour travaillé, Absence ou Aucun impact.</p></div></div>
+  <div class="section-head"><div><h3>Motifs RH et impact présence</h3><p>Valeurs possibles : Jour travaillé, Absence ou Aucun impact. Cliquez sur la pastille de couleur pour ouvrir la palette.</p></div></div>
   <div id="presenceMapMsg" class="alert hidden"></div>
-  <div class="tablewrap"><table><thead><tr><th>Code</th><th>Motif RH</th><th>Impact présence</th><th>État</th><th>Commentaire</th><th></th></tr></thead><tbody id="presenceMapRows"></tbody></table></div>
+  <div class="tablewrap"><table><thead><tr><th>Code</th><th>Motif RH</th><th>Impact présence</th><th>État</th><th>Couleur</th><th>Commentaire</th><th></th></tr></thead><tbody id="presenceMapRows"></tbody></table></div>
  </div>
 </section>
 

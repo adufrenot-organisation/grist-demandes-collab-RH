@@ -1,4 +1,4 @@
-const VERSION="V1.67";
+const VERSION="V1.69";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -746,10 +746,12 @@ async function loadManagerContext(){
 
     applyViewAs();
     render();
+    if(S.planningReady)renderPlanning();
   }catch(e){
     console.warn("Mode manager indisponible:",e);
     S.managerLinks=[];S.managedResources=[];S.viewAs=null;
     applyViewAs();
+    if(S.planningReady)renderPlanning();
   }
 }
 function setViewAs(id){
@@ -908,6 +910,8 @@ function planningDisplayForRow(row){
   return {code:"",type:"",reason:motifCode?`Motif ${motifCode} non configuré dans ${T.presenceMap}`:`Aucun motif synchronisé`};
 }
 function resourceById(id){return (S.resources||[]).find(r=>Number(r.id)===Number(id))||null}
+function currentProfile(){return norm(F(S.person||{},"Profil","profil")).toUpperCase()}
+function isPmo(){return currentProfile()==="PMO"}
 function isForecastAbsenceRequest(r){
   if(!r||st(r)!=="EN_ATTENTE"||isCancellationRequest(r))return false;
   const action=norm(F(r,"Type_Action")).toUpperCase();
@@ -941,18 +945,141 @@ function forecastMapForDates(dates){
   }
   return out;
 }
-function forecastYearCount(resourceIds){
-  const profile=norm(F(S.person||{},"Profil","profil")).toUpperCase();
-  const allowed=S.isOwner||S.isAdmin||profile==="PMO";
+function annualConfirmedStats(resourceIds,year){
+  const ids=new Set((resourceIds||[]).map(Number).filter(Boolean));
+  const byKey=new Map();
+  for(const row of (S.planningRows||[])){
+    const resourceId=Number(rid(F(row,"Ressource"))||0);if(!resourceId||!ids.has(resourceId))continue;
+    const iso=planningIsoDate(F(row,"Date"));if(!iso||iso.slice(0,4)!==String(year))continue;
+    const display=planningDisplayForRow(row);if(!["P","A"].includes(display.code))continue;
+    byKey.set(`${resourceId}|${iso}`,display.code);
+  }
+  let worked=0,absence=0;
+  for(const code of byKey.values()){if(code==="P")worked++;else if(code==="A")absence++;}
+  const denominator=worked+absence;
+  return {worked,absence,total:denominator,rate:denominator?worked*100/denominator:null};
+}
+function annualPresenceRateGlobal(){
+  const active=(S.resources||[]).filter(r=>F(r,"Actif","actif")!==false);
+  const canSeeAll=!!(S.isAdmin||S.isOwner||isPmo());
+  const ownTeam=norm(F(S.person||{},"Equipe_Code","Equipe","equipe"));
+  let visible=active;
+  if(!canSeeAll){
+    const managed=new Set((S.managedResources||[]).map(r=>Number(r.id)).filter(Boolean));
+    visible=active.filter(r=>Number(r.id)===Number(S.person?.id||0)||managed.has(Number(r.id))||(ownTeam&&norm(F(r,"Equipe_Code","Equipe","equipe"))===ownTeam));
+  }
+  return annualConfirmedStats(visible.map(r=>r.id),localIsoToday().slice(0,4));
+}
+function annualCalendarData(resourceId,year){
+  const confirmed=new Map();
+  for(const row of (S.planningRows||[])){
+    if(Number(rid(F(row,"Ressource"))||0)!==Number(resourceId))continue;
+    const iso=planningIsoDate(F(row,"Date"));if(!iso||iso.slice(0,4)!==String(year))continue;
+    const display=planningDisplayForRow(row);
+    if(["P","A"].includes(display.code))confirmed.set(iso,{code:display.code,row,display});
+  }
+  const dates=[];let d=`${year}-01-01`,end=`${year}-12-31`,guard=0;
+  while(d<=end&&guard<370){dates.push(d);d=addDaysIso(d,1);guard++;}
+  const forecast=forecastMapForDates(dates).get(Number(resourceId))||new Map();
+  return {confirmed,forecast,dates};
+}
+function annualAvailableYears(resourceId){
+  const years=new Set();
+  const current=Number(localIsoToday().slice(0,4));
+  [current-2,current-1,current,current+1].forEach(y=>years.add(y));
+  for(const row of (S.planningRows||[])){
+    if(Number(rid(F(row,"Ressource"))||0)!==Number(resourceId))continue;
+    const iso=planningIsoDate(F(row,"Date"));if(iso)years.add(Number(iso.slice(0,4)));
+  }
+  return [...years].filter(Boolean).sort((a,b)=>b-a);
+}
+function closeAnnualPresence(){
+  const m=$("annualPresenceModal");if(m)m.classList.add("hidden");S.annualPresenceResourceId=null;
+}
+function openAnnualPresence(resourceId){
+  const resource=resourceById(resourceId);if(!resource)return;
+  S.annualPresenceResourceId=Number(resourceId);
+  if(!S.annualPresenceYear)S.annualPresenceYear=Number(localIsoToday().slice(0,4));
+  const select=$("annualPresenceYear");
+  if(select){
+    const years=annualAvailableYears(resourceId);
+    if(!years.includes(Number(S.annualPresenceYear)))years.push(Number(S.annualPresenceYear));
+    select.innerHTML=years.sort((a,b)=>b-a).map(y=>`<option value="${y}">${y}</option>`).join("");
+    select.value=String(S.annualPresenceYear);
+  }
+  const m=$("annualPresenceModal");if(m)m.classList.remove("hidden");
+  renderAnnualPresence();
+}
+function renderAnnualPresence(){
+  const resourceId=Number(S.annualPresenceResourceId||0);if(!resourceId)return;
+  const resource=resourceById(resourceId);if(!resource)return;
+  const year=Number(S.annualPresenceYear||localIsoToday().slice(0,4));
+  const name=norm(F(resource,"Nom"))||email(F(resource,"Email"))||`Ressource ${resourceId}`;
+  const team=norm(F(resource,"Equipe_Code","Equipe","equipe"));
+  const title=$("annualPresenceTitle");if(title)title.textContent=name;
+  const sub=$("annualPresenceSubtitle");if(sub)sub.textContent=`Calendrier ${year}${team?` · ${team}`:""}`;
+  const stats=annualConfirmedStats([resourceId],year);
+  const rate=$("annualPresenceRateKpi");if(rate)rate.textContent=stats.rate===null?"Taux de présence —":`Taux de présence ${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;
+  const abs=$("annualAbsenceKpi");if(abs)abs.textContent=`${stats.absence} jour${stats.absence>1?"s":""} d’absence`;
+  const {confirmed,forecast}=annualCalendarData(resourceId,year);
+  const canSeeDetails=canSeePlanningMotifDetails(resourceId);
+  const monthNames=Array.from({length:12},(_,m)=>new Date(year,m,1).toLocaleDateString("fr-FR",{month:"long"}));
+  const weekdays=["L","M","M","J","V","S","D"];
+  const html=monthNames.map((monthName,m)=>{
+    const first=new Date(year,m,1,12),last=new Date(year,m+1,0,12);
+    const offset=(first.getDay()+6)%7, cells=[];
+    weekdays.forEach(w=>cells.push(`<div class="annual-weekday">${w}</div>`));
+    for(let i=0;i<offset;i++)cells.push('<div class="annual-day empty"></div>');
+    for(let day=1;day<=last.getDate();day++){
+      const iso=`${year}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+      const date=new Date(year,m,day,12),weekend=[0,6].includes(date.getDay()),base=confirmed.get(iso),forecastRequests=forecast.get(iso)||[];
+      let code=forecastRequests.length?"AP":(base?.code||"");
+      let tip="Aucune donnée de présence";
+      if(code==="AP"){
+        if(canSeeDetails){
+          const details=forecastRequests.map(req=>motifName(rid(F(req,"Motif")))||"Absence prévisionnelle").join(" / ");
+          tip=`Absence prévisionnelle · ${details}`;
+        }else tip="Absence prévisionnelle";
+      }else if(base){
+        if(canSeeDetails){
+          const row=base.row,original=[norm(F(row,"Libelle")),norm(F(row,"Motif_Code")),norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);
+          tip=[base.display.reason,...original].filter(Boolean).join(" · ");
+        }else tip=base.display.reason;
+      }
+      const cls=code?`day-${code.toLowerCase()}`:"";
+      const today=iso===localIsoToday()?"today":"";
+      let motifColor="";
+      if(canSeeDetails&&code){
+        if(code==="AP"){
+          const motifIds=forecastRequests.map(req=>rid(F(req,"Motif"))).filter(Boolean);
+          if(motifIds.length===1)motifColor=presenceColorForMotif(motifIds[0]);
+        }else if(base?.row)motifColor=presenceColorForMotifCode(norm(F(base.row,"Motif_Code")));
+      }
+      const dayStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";
+      cells.push(`<div class="annual-day ${weekend?"weekend":""} ${cls} ${today}" title="${esc(tip)}"${dayStyle}><span>${day}</span>${code?`<span class="annual-mark">${esc(code)}</span>`:""}</div>`);
+    }
+    return `<section class="annual-month"><h4>${esc(monthName)} ${year}</h4><div class="annual-month-grid">${cells.join("")}</div></section>`;
+  }).join("");
+  const cal=$("annualPresenceCalendar");if(cal)cal.innerHTML=html;
+}
+function forecastYearCount(){
+  // Compteur global sur toute l'année civile en cours pour PMO / Admin / Owner.
+  // Il ne dépend ni de la fenêtre de 15 jours, ni des filtres équipe/recherche du planning.
+  const allowed=S.isOwner||S.isAdmin||isPmo();
   if(!allowed)return null;
-  const ids=new Set((resourceIds||[]).map(Number));
+  const ids=new Set((S.resources||[])
+    .filter(r=>F(r,"Actif","actif")!==false)
+    .map(r=>Number(r.id))
+    .filter(Boolean));
   const year=localIsoToday().slice(0,4),yearStart=`${year}-01-01`,yearEnd=`${year}-12-31`;
   const unique=new Set();
   for(const r of (S.allRequests||[])){
     if(!isForecastAbsenceRequest(r))continue;
-    const resourceId=rid(F(r,"Demandeur"));if(!resourceId||!ids.has(Number(resourceId)))continue;
+    const resourceId=rid(F(r,"Demandeur"));
+    if(!resourceId||!ids.has(Number(resourceId)))continue;
     const range=requestIsoRange(r);if(!range)continue;
-    let [a,b]=range;if(b<yearStart||a>yearEnd)continue;
+    let [a,b]=range;
+    if(b<yearStart||a>yearEnd)continue;
     if(a<yearStart)a=yearStart;if(b>yearEnd)b=yearEnd;
     eachIsoDate(a,b,d=>unique.add(`${resourceId}|${d}`));
   }
@@ -963,7 +1090,9 @@ function canSeePlanningMotifDetails(resourceId){
   if(!id)return false;
   if(S.isOwner||S.isAdmin)return true;
   if(id===Number(S.person?.id||0))return true;
-  return (S.managedResources||[]).some(x=>Number(x.id)===id);
+  // Manager : détails réels uniquement pour les ressources explicitement rattachées.
+  if((S.managedResources||[]).some(x=>Number(x.id)===id))return true;
+  return (S.managerLinks||[]).some(x=>F(x,"Actif")!==false&&Number(rid(F(x,"Ressource")))===id);
 }
 async function planningTableExists(){try{await grist.docApi.fetchTable(T.planning);return true}catch{return false}}
 async function ensurePlanningTable(){
@@ -1038,9 +1167,15 @@ function renderPlanning(){
   const count=$("planningCount");if(count)count.textContent=`${resources.length} ressource${resources.length>1?"s":""} affichée${resources.length>1?"s":""}`;
   const forecastCount=$("planningForecastCount");
   if(forecastCount){
-    const total=forecastYearCount(resources.map(r=>r.id));
+    const total=forecastYearCount();
     forecastCount.classList.toggle("hidden",total===null);
     if(total!==null)forecastCount.textContent=`Absences prévisionnelles ${localIsoToday().slice(0,4)} : ${total} jour${total>1?"s":""}`;
+  }
+  const presenceRate=$("planningPresenceRate");
+  if(presenceRate){
+    const stats=annualPresenceRateGlobal(),year=localIsoToday().slice(0,4);
+    presenceRate.textContent=stats.rate===null?`Taux de présence ${year} : —`:`Taux de présence ${year} : ${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;
+    presenceRate.title=`${stats.worked} jour(s) travaillé(s) / ${stats.total} jour(s) classé(s) selon ${T.presenceMap}`;
   }
   const head=$("planningHead");if(head)head.innerHTML='<th class="sticky-col resource-col">Ressource</th><th class="sticky-col team-col">Équipe</th>'+dates.map(d=>{const h=frenchDayHeader(d);return `<th class="planning-day ${h.weekend?"weekend":""}"><span>${h.dow}</span><strong>${h.day}</strong></th>`}).join("");
   const body=$("planningBody");if(body)body.innerHTML=resources.length?resources.map(r=>{
@@ -1073,10 +1208,19 @@ function renderPlanning(){
           title=code?display.reason:"Aucune information de présence affichable";
         }
       }
-      return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}">${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;
+      let motifColor="";
+      if(canSeeDetails&&code){
+        if(usingForecast){
+          const motifIds=forecastRequests.map(req=>rid(F(req,"Motif"))).filter(Boolean);
+          if(motifIds.length===1)motifColor=presenceColorForMotif(motifIds[0]);
+        }else if(row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));
+      }
+      const chipStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";
+      return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}"${chipStyle}>${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;
     }).join("");
-    return `<tr><td class="sticky-col resource-col"><div class="resource-name"><span class="resource-avatar">${esc(initials||"R")}</span><strong>${esc(name)}</strong></div></td><td class="sticky-col team-col" title="${esc(teamName)}">${esc(teamName)}</td>${cells}</tr>`;
+    return `<tr><td class="sticky-col resource-col"><div class="resource-name"><span class="resource-avatar">${esc(initials||"R")}</span><strong>${esc(name)}</strong><button type="button" class="resource-calendar-btn" data-annual-resource="${id}" title="Voir le calendrier annuel de ${esc(name)}" aria-label="Voir le calendrier annuel de ${esc(name)}">▦</button></div></td><td class="sticky-col team-col" title="${esc(teamName)}">${esc(teamName)}</td>${cells}</tr>`;
   }).join(""):`<tr><td colspan="17" class="planning-empty">Aucune présence synchronisée sur cette période.</td></tr>`;
+  document.querySelectorAll("[data-annual-resource]").forEach(btn=>btn.onclick=()=>openAnnualPresence(Number(btn.dataset.annualResource)));
   const latest=(S.planningRows||[]).map(r=>Number(F(r,"Derniere_Sync")||0)).filter(Boolean).sort((a,b)=>b-a)[0];
   const sync=$("planningSync");if(sync)sync.textContent=latest?`Synchronisé · ${new Date(latest*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:"En attente de synchronisation";
 }
@@ -1094,12 +1238,13 @@ async function presenceMapTableExists(){
   try{await grist.docApi.fetchTable(T.presenceMap);return true}catch{return false}
 }
 async function ensurePresenceMapTable(){
-  if(await presenceMapTableExists())return true;
+  if(await presenceMapTableExists()){if(S.isOwner)await ensurePresenceMapColorColumn();return true;}
   if(!S.isOwner)throw new Error("Seul l’Owner peut initialiser la table de correspondance présence.");
   await grist.docApi.applyUserActions([["AddTable",T.presenceMap,[
     {id:"Motif",type:"Ref:Motifs_RH",label:"Motif RH"},
     {id:"Type_Presence",type:"Text",label:"Type de présence"},
     {id:"Actif",type:"Bool",label:"Actif"},
+    {id:"Couleur",type:"Text",label:"Couleur"},
     {id:"Commentaire",type:"Text",label:"Commentaire"}
   ]]]);
   return true;
@@ -1113,6 +1258,36 @@ async function loadPresenceMappings(){
 }
 function presenceTypeLabel(v){
   return ({JOUR_TRAVAILLE:"Jour travaillé",ABSENCE:"Absence",AUCUN_IMPACT:"Aucun impact"})[norm(v).toUpperCase()]||"Non configuré";
+}
+function defaultPresenceColor(type){
+  return ({JOUR_TRAVAILLE:"#ffe8ed",ABSENCE:"#e2f5df",AUCUN_IMPACT:"#eef3f8"})[norm(type).toUpperCase()]||"#eef3f8";
+}
+function validHexColor(v){
+  const x=norm(v).toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(x)?x:"";
+}
+function contrastColor(hex){
+  const x=validHexColor(hex);if(!x)return "#263a57";
+  const r=parseInt(x.slice(1,3),16),g=parseInt(x.slice(3,5),16),b=parseInt(x.slice(5,7),16);
+  return (r*299+g*587+b*114)/1000>150?"#263a57":"#ffffff";
+}
+function presenceMappingForMotif(motifId){
+  return (S.presenceMappings||[]).find(x=>rid(F(x,"Motif"))===Number(motifId)&&F(x,"Actif")!==false)||null;
+}
+function presenceColorForMotif(motifId){
+  const r=presenceMappingForMotif(motifId);if(!r)return "";
+  return validHexColor(F(r,"Couleur"))||defaultPresenceColor(F(r,"Type_Presence"));
+}
+function presenceColorForMotifCode(code){
+  const wanted=norm(code).toUpperCase();if(!wanted)return "";
+  const motif=(S.motifs||[]).find(m=>norm(F(m,"Code")).toUpperCase()===wanted);
+  return motif?presenceColorForMotif(motif.id):"";
+}
+function presenceChipStyle(color){
+  const c=validHexColor(color);return c?`background:${c};color:${contrastColor(c)};border-color:${c}`:"";
+}
+async function ensurePresenceMapColorColumn(){
+  try{await grist.docApi.applyUserActions([["AddColumn",T.presenceMap,"Couleur",{type:"Text",label:"Couleur"}]]);}catch(e){}
 }
 async function renderPresenceMapAdmin(){
   if(!S.isOwner)return;
@@ -1129,10 +1304,29 @@ async function renderPresenceMapAdmin(){
     const type=norm(F(r,"Type_Presence")).toUpperCase();
     const actif=r?F(r,"Actif")!==false:true;
     const comment=r?norm(F(r,"Commentaire")):"";
+    const currentColor=validHexColor(r?F(r,"Couleur"):"")||defaultPresenceColor(type);
     const opts=[["","— Non configuré —"],["JOUR_TRAVAILLE","Jour travaillé"],["ABSENCE","Absence"],["AUCUN_IMPACT","Aucun impact"]]
       .map(([v,l])=>`<option value="${v}" ${type===v?"selected":""}>${l}</option>`).join("");
-    return `<tr><td><span class="codechip">${esc(F(m,"Code")||"—")}</span></td><td><strong>${esc(F(m,"Libelle")||"—")}</strong></td><td><select data-presence-type="${m.id}">${opts}</select></td><td><label class="toggleline"><input type="checkbox" data-presence-active="${m.id}" ${actif?"checked":""}> Actif</label></td><td><input data-presence-comment="${m.id}" value="${esc(comment)}" placeholder="Optionnel"></td><td><button class="table-action" data-presence-save="${m.id}">Enregistrer</button></td></tr>`;
-  }).join("")||'<tr><td colspan="6">Aucun motif RH à paramétrer.</td></tr>';
+    return `<tr><td><span class="codechip">${esc(F(m,"Code")||"—")}</span></td><td><strong>${esc(F(m,"Libelle")||"—")}</strong></td><td><select data-presence-type="${m.id}">${opts}</select></td><td><label class="toggleline"><input type="checkbox" data-presence-active="${m.id}" ${actif?"checked":""}> Actif</label></td><td><div class="presence-color-control"><label class="presence-color-picker" title="Choisir la couleur"><span class="presence-color-preview" data-presence-color-preview="${m.id}" style="background:${esc(currentColor)}"></span><input type="color" data-presence-color="${m.id}" value="${esc(currentColor)}" aria-label="Choisir la couleur du motif ${esc(F(m,"Libelle")||F(m,"Code")||"")}"></label><input class="presence-color-hex" data-presence-color-hex="${m.id}" value="${esc(currentColor)}" maxlength="7" spellcheck="false" aria-label="Code hexadécimal de la couleur"><button type="button" class="table-action small" data-presence-color-default="${m.id}">Défaut</button></div></td><td><input data-presence-comment="${m.id}" value="${esc(comment)}" placeholder="Optionnel"></td><td><button class="table-action" data-presence-save="${m.id}">Enregistrer</button></td></tr>`;
+  }).join("")||'<tr><td colspan="7">Aucun motif RH à paramétrer.</td></tr>';
+  const syncPresenceColorUi=(id,color)=>{
+    const c=validHexColor(color);if(!c)return false;
+    const picker=document.querySelector(`[data-presence-color="${id}"]`);
+    const hex=document.querySelector(`[data-presence-color-hex="${id}"]`);
+    const preview=document.querySelector(`[data-presence-color-preview="${id}"]`);
+    if(picker)picker.value=c;if(hex)hex.value=c;if(preview)preview.style.background=c;return true;
+  };
+  document.querySelectorAll("[data-presence-color]").forEach(input=>{
+    input.addEventListener("input",()=>syncPresenceColorUi(Number(input.dataset.presenceColor),input.value));
+  });
+  document.querySelectorAll("[data-presence-color-hex]").forEach(input=>{
+    input.addEventListener("input",()=>{const id=Number(input.dataset.presenceColorHex);const raw=norm(input.value).toUpperCase();input.value=raw;if(validHexColor(raw))syncPresenceColorUi(id,raw);});
+    input.addEventListener("blur",()=>{const id=Number(input.dataset.presenceColorHex);if(!syncPresenceColorUi(id,input.value)){const picker=document.querySelector(`[data-presence-color="${id}"]`);syncPresenceColorUi(id,picker?.value||"#FFFFFF");}});
+  });
+  document.querySelectorAll("[data-presence-color-default]").forEach(b=>b.onclick=()=>{
+    const id=Number(b.dataset.presenceColorDefault),type=norm(document.querySelector(`[data-presence-type="${id}"]`)?.value).toUpperCase();
+    syncPresenceColorUi(id,defaultPresenceColor(type));
+  });
   document.querySelectorAll("[data-presence-save]").forEach(b=>b.onclick=()=>savePresenceMapping(Number(b.dataset.presenceSave)).catch(showPresenceMapError));
 }
 function showPresenceMapError(e){
@@ -1150,9 +1344,10 @@ async function savePresenceMapping(motifId){
   if(!["JOUR_TRAVAILLE","ABSENCE","AUCUN_IMPACT"].includes(type))throw new Error("Choisissez Jour travaillé, Absence ou Aucun impact.");
   const actif=!!document.querySelector(`[data-presence-active="${motifId}"]`)?.checked;
   const commentaire=norm(document.querySelector(`[data-presence-comment="${motifId}"]`)?.value);
+  const couleur=validHexColor(document.querySelector(`[data-presence-color-hex="${motifId}"]`)?.value)||validHexColor(document.querySelector(`[data-presence-color="${motifId}"]`)?.value)||defaultPresenceColor(type);
   await ensurePresenceMapTable();await loadPresenceMappings();
   const old=S.presenceMappings.find(r=>rid(F(r,"Motif"))===Number(motifId));
-  const fields={Motif:Number(motifId),Type_Presence:type,Actif:actif,Commentaire:commentaire};
+  const fields={Motif:Number(motifId),Type_Presence:type,Actif:actif,Couleur:couleur,Commentaire:commentaire};
   if(old)await grist.getTable(T.presenceMap).update({id:old.id,fields});
   else await grist.getTable(T.presenceMap).create({fields});
   await renderPresenceMapAdmin();showPresenceMapSuccess(`Correspondance enregistrée : ${presenceTypeLabel(type)}.`);
@@ -1401,14 +1596,19 @@ async function boot(){
   if($("planningNext")) $("planningNext").onclick=()=>shiftPlanning(15);
   if($("planningToday")) $("planningToday").onclick=()=>resetPlanningToday();
   if($("planningRefresh")) $("planningRefresh").onclick=()=>loadPlanning().catch(showPlanningError);
+  if($("closeAnnualPresence")) $("closeAnnualPresence").onclick=closeAnnualPresence;
+  if($("annualPresenceYear")) $("annualPresenceYear").onchange=e=>{S.annualPresenceYear=Number(e.target.value);renderAnnualPresence();};
+  if($("annualPresenceModal")) $("annualPresenceModal").onclick=e=>{if(e.target===$("annualPresenceModal"))closeAnnualPresence();};
+
   if($("allTeamFilter")) $("allTeamFilter").onchange=()=>render();
   if($("allResourceFilter")) $("allResourceFilter").onchange=()=>render();
   renderDebug();
   await syncAll("startup")
   await identify();
   await detectOwner();
-  await load();await loadLabels();await loadMenuOrder();await loadSyncParams();await loadSyncRequests();showView("home");
-  setTimeout(()=>loadManagerContext().catch(e=>console.warn("Mode manager:",e)),0);
+  await load();await loadLabels();await loadMenuOrder();await loadSyncParams();await loadSyncRequests();
+  await loadManagerContext().catch(e=>console.warn("Mode manager:",e));
+  showView("home");
 }
 boot().catch(fatal);
 
