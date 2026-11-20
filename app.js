@@ -1,4 +1,4 @@
-const VERSION="V1.79";
+const VERSION="V1.80";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -1835,6 +1835,38 @@ async function boot(){
 }
 boot().catch(fatal);
 
+
+// V1.80 — menu latéral rétractable, compact par défaut
+document.addEventListener("DOMContentLoaded", () => {
+  const shell = document.querySelector(".shell");
+  const sidebar = document.querySelector(".sidebar");
+  const toggle = document.getElementById("sidebarToggle");
+  if (!shell || !sidebar || !toggle) return;
+
+  const setCollapsed = (collapsed) => {
+    shell.classList.toggle("sidebar-collapsed", collapsed);
+    sidebar.classList.toggle("is-collapsed", collapsed);
+    toggle.textContent = collapsed ? "›" : "‹";
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggle.setAttribute("aria-label", collapsed ? "Développer le menu" : "Réduire le menu");
+    toggle.title = collapsed ? "Développer le menu" : "Réduire le menu";
+  };
+
+  // Par défaut à chaque ouverture : mode compact.
+  setCollapsed(true);
+  toggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCollapsed(!sidebar.classList.contains("is-collapsed"));
+  });
+
+  sidebar.querySelectorAll(".nav").forEach(btn => {
+    const label = btn.querySelector("span")?.textContent?.trim();
+    if (label && !btn.title) btn.title = label;
+    btn.setAttribute("aria-label", label || btn.getAttribute("aria-label") || "Menu");
+  });
+});
+
 // V1.25 — rubriques exclusives de la sidebar
 document.addEventListener("DOMContentLoaded", () => {
   const sidebar = document.querySelector(".sidebar");
@@ -1868,7 +1900,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","planning","all"],
-    admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","syncParams","syncRequests","sync"]
+    admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","syncParams","syncRequests","planningParams","sync"]
   };
 
   const applyAccordion = (open) => {

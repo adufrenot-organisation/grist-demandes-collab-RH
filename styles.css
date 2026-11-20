@@ -777,3 +777,63 @@ main > header.app-header .header-identity{
 @media(max-width:1500px){.planning-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.planning-range-nav{grid-column:span 2;justify-content:flex-start}.planning-today{justify-self:start}}
 @media(max-width:900px){.planning-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.planning-range-nav{grid-column:1/-1}}
 @media(max-width:600px){.planning-filters{grid-template-columns:1fr}.planning-range-nav{grid-column:auto}.planning-today{width:100%}}
+\n\n/* V1.80 — sidebar rétractable + alignement planning */
+.shell{transition:grid-template-columns .2s ease}
+.sidebar{transition:width .2s ease,padding .2s ease}
+.sidebar .brand{display:flex!important;align-items:center!important;gap:10px!important;padding-right:38px!important}
+.sidebar .brand-copy{min-width:0}
+.sidebar-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:30px;height:30px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#fff;border-radius:9px;display:grid;place-items:center;font-size:20px;line-height:1;cursor:pointer;z-index:60}
+.sidebar-toggle:hover{background:rgba(255,255,255,.12)}
+
+.shell.sidebar-collapsed{grid-template-columns:76px minmax(0,1fr)}
+.shell.sidebar-collapsed .sidebar{padding-left:10px!important;padding-right:10px!important}
+.shell.sidebar-collapsed .sidebar .brand{justify-content:center!important;padding:2px 0 18px!important}
+.shell.sidebar-collapsed .sidebar .brand-copy,
+.shell.sidebar-collapsed .sidebar .version,
+.shell.sidebar-collapsed .sidebar .nav-title{display:none!important}
+.shell.sidebar-collapsed .sidebar .sidebar-toggle{right:-1px;top:58px;transform:none}
+.shell.sidebar-collapsed .sidebar .mark{width:42px;height:42px;flex:0 0 42px}
+.shell.sidebar-collapsed .sidebar .nav{justify-content:center!important;padding:0!important;min-height:46px!important;width:46px!important;margin:4px auto!important;font-size:20px!important;gap:0!important}
+.shell.sidebar-collapsed .sidebar .nav span{display:none!important}
+.shell.sidebar-collapsed .sidebar .syncmini{grid-template-columns:1fr!important;padding:8px!important;margin:12px auto 6px!important;width:46px!important;justify-items:center!important}
+.shell.sidebar-collapsed .sidebar .syncmini>div{display:none!important}
+.shell.sidebar-collapsed .sidebar .syncmini>span{font-size:11px}
+.shell.sidebar-collapsed .sidebar .syncmini button{display:grid;place-items:center}
+.shell.sidebar-collapsed .content{max-width:none;padding-left:26px;padding-right:26px}
+
+/* Filtres : hauteurs et lignes de base cohérentes */
+.planning-filters{align-items:end!important}
+.planning-filters label,.planning-resource-filter{min-width:0}
+.planning-filters select,.planning-filters input,.planning-resource-filter summary,.planning-today{height:42px!important;min-height:42px!important}
+.planning-resource-filter summary{display:flex;align-items:center}
+.planning-range-nav{min-height:42px;align-self:end}
+.planning-range-nav .iconbtn{flex:0 0 42px}
+.planning-range-nav strong{display:flex;align-items:center;justify-content:center;min-height:42px}
+
+/* Bandeau KPI/visibilité : colonnes nettes, centrage vertical */
+.planning-toolbar{display:grid!important;grid-template-columns:minmax(420px,1.45fr) minmax(270px,.85fr) minmax(240px,.75fr) auto!important;gap:22px!important;align-items:center!important;padding:20px 22px!important}
+.planning-metric-stack{gap:10px!important;align-self:center}
+.planning-metrics,.planning-annual-metrics{gap:8px!important;align-items:center!important}
+.planning-metrics>*,.planning-annual-metrics>*{min-height:36px;display:inline-flex!important;align-items:center!important;justify-content:center!important;padding-top:7px!important;padding-bottom:7px!important}
+.planning-display-filters{display:grid!important;grid-template-columns:1fr!important;gap:8px!important;justify-items:stretch!important;align-self:center}
+.planning-display-filters label{min-height:42px!important;justify-content:flex-start!important;margin:0!important}
+.planning-legend{display:flex!important;align-items:center!important;justify-content:center!important;min-height:42px!important;text-align:center}
+.planning-actions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:10px!important;min-height:42px!important}
+.planning-actions .readonly-badge{min-height:36px;display:inline-flex;align-items:center}
+
+@media(max-width:1250px){
+  .planning-toolbar{grid-template-columns:minmax(0,1.25fr) minmax(250px,.75fr)!important}
+  .planning-legend,.planning-actions{justify-content:flex-start!important}
+}
+@media(max-width:850px){
+  .shell:not(.sidebar-collapsed){grid-template-columns:250px minmax(0,1fr)}
+  .shell.sidebar-collapsed{grid-template-columns:76px minmax(0,1fr)}
+  .sidebar:not(.is-collapsed) .brand-copy,.sidebar:not(.is-collapsed) .nav-title,.sidebar:not(.is-collapsed) .nav span,.sidebar:not(.is-collapsed) .version{display:initial}
+  .planning-toolbar{grid-template-columns:1fr!important;gap:14px!important}
+  .planning-display-filters{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .planning-legend,.planning-actions{justify-content:flex-start!important}
+}
+@media(max-width:650px){
+  .planning-display-filters{grid-template-columns:1fr!important}
+  .planning-metrics>*,.planning-annual-metrics>*{flex:1 1 100%!important}
+}
