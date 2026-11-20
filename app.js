@@ -1,4 +1,4 @@
-const VERSION="V1.77";
+const VERSION="V1.78";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[]};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -1081,19 +1081,29 @@ function periodForecastCount(resourceIds,dates){
 
 
 function renderPlanningAnnualByResource(resources,year){
-  const box=$("planningAnnualByResource");if(!box)return;
-  const btn=$("planningAnnualByResourceBtn");
-  const open=!!S.planningAnnualByResourceOpen;
-  box.classList.toggle("hidden",!open);
-  if(btn){btn.setAttribute("aria-expanded",open?"true":"false");btn.classList.toggle("active",open);}
-  if(!open)return;
-  const rows=(resources||[]).map(r=>{
-    const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,team=norm(F(r,"Equipe_Code","Equipe","equipe"))||"—";
-    const stats=annualConfirmedStats([id],year);
-    const rate=stats.rate===null?"—":`${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;
-    return `<tr><td><strong>${esc(name)}</strong></td><td>${esc(team)}</td><td>${esc(rate)}</td><td>${stats.absence}</td></tr>`;
-  }).join("");
-  box.innerHTML=`<div class="planning-annual-by-resource-head"><strong>Détail par ressources · ${year}</strong><span>${resources.length} ressource${resources.length>1?"s":""}</span></div><div class="planning-annual-by-resource-tablewrap"><table><thead><tr><th>Ressource</th><th>Équipe</th><th>Taux de présence</th><th>Jours d’absence</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="planning-annual-by-resource-empty">Aucune ressource dans le périmètre filtré.</td></tr>'}</tbody></table></div>`;
+  S.planningAnnualByResourceData={resources:[...(resources||[])],year};
+}
+function openPlanningAnnualByResource(){
+  const data=S.planningAnnualByResourceData||{resources:[],year:new Date().getFullYear()};
+  const resources=data.resources||[],year=data.year;
+  const body=$("planningAnnualByResourceBody");
+  const title=$("planningAnnualByResourceTitle");
+  const subtitle=$("planningAnnualByResourceSubtitle");
+  if(title)title.textContent=`Détail annuel par ressources · ${year}`;
+  if(subtitle)subtitle.textContent=`${resources.length} ressource${resources.length>1?"s":""} dans le périmètre filtré`;
+  if(body){
+    const rows=resources.map(r=>{
+      const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,team=norm(F(r,"Equipe_Code","Equipe","equipe"))||"—";
+      const stats=annualConfirmedStats([id],year);
+      const rate=stats.rate===null?"—":`${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;
+      return `<tr><td><strong>${esc(name)}</strong></td><td>${esc(team)}</td><td>${esc(rate)}</td><td>${stats.absence}</td></tr>`;
+    }).join("");
+    body.innerHTML=rows||'<tr><td colspan="4" class="planning-annual-by-resource-empty">Aucune ressource dans le périmètre filtré.</td></tr>';
+  }
+  $("planningAnnualByResourceModal")?.classList.remove("hidden");
+}
+function closePlanningAnnualByResource(){
+  $("planningAnnualByResourceModal")?.classList.add("hidden");
 }
 
 function annualPresenceRateGlobal(){
@@ -1691,7 +1701,9 @@ async function boot(){
   if($("planningResourcesAll")) $("planningResourcesAll").onclick=()=>{S.planningSelectedResourceIds=[];renderPlanning();};
   if($("planningToday")) $("planningToday").onclick=()=>resetPlanningToday();
   if($("planningRefresh")) $("planningRefresh").onclick=()=>loadPlanning().catch(showPlanningError);
-  if($("planningAnnualByResourceBtn")) $("planningAnnualByResourceBtn").onclick=()=>{S.planningAnnualByResourceOpen=!S.planningAnnualByResourceOpen;renderPlanning();};
+  if($("planningAnnualByResourceBtn")) $("planningAnnualByResourceBtn").onclick=openPlanningAnnualByResource;
+  if($("closePlanningAnnualByResource")) $("closePlanningAnnualByResource").onclick=closePlanningAnnualByResource;
+  if($("planningAnnualByResourceModal")) $("planningAnnualByResourceModal").onclick=e=>{if(e.target===$("planningAnnualByResourceModal"))closePlanningAnnualByResource();};
   if($("planningBody")) $("planningBody").addEventListener("click",e=>{
     const btn=e.target.closest?.("[data-annual-resource]");
     if(!btn||!$("planningBody").contains(btn))return;
