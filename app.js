@@ -1220,7 +1220,6 @@ function renderPlanning(){
     }).join("");
     return `<tr><td class="sticky-col resource-col"><div class="resource-name"><span class="resource-avatar">${esc(initials||"R")}</span><strong>${esc(name)}</strong><button type="button" class="resource-calendar-btn" data-annual-resource="${id}" title="Voir le calendrier annuel de ${esc(name)}" aria-label="Voir le calendrier annuel de ${esc(name)}">▦</button></div></td><td class="sticky-col team-col" title="${esc(teamName)}">${esc(teamName)}</td>${cells}</tr>`;
   }).join(""):`<tr><td colspan="17" class="planning-empty">Aucune présence synchronisée sur cette période.</td></tr>`;
-  document.querySelectorAll("[data-annual-resource]").forEach(btn=>btn.onclick=()=>openAnnualPresence(Number(btn.dataset.annualResource)));
   const latest=(S.planningRows||[]).map(r=>Number(F(r,"Derniere_Sync")||0)).filter(Boolean).sort((a,b)=>b-a)[0];
   const sync=$("planningSync");if(sync)sync.textContent=latest?`Synchronisé · ${new Date(latest*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:"En attente de synchronisation";
 }
@@ -1596,6 +1595,14 @@ async function boot(){
   if($("planningNext")) $("planningNext").onclick=()=>shiftPlanning(15);
   if($("planningToday")) $("planningToday").onclick=()=>resetPlanningToday();
   if($("planningRefresh")) $("planningRefresh").onclick=()=>loadPlanning().catch(showPlanningError);
+  if($("planningBody")) $("planningBody").addEventListener("click",e=>{
+    const btn=e.target.closest?.("[data-annual-resource]");
+    if(!btn||!$("planningBody").contains(btn))return;
+    e.preventDefault();
+    e.stopPropagation();
+    const id=Number(btn.dataset.annualResource||0);
+    if(id)openAnnualPresence(id);
+  });
   if($("closeAnnualPresence")) $("closeAnnualPresence").onclick=closeAnnualPresence;
   if($("annualPresenceYear")) $("annualPresenceYear").onchange=e=>{S.annualPresenceYear=Number(e.target.value);renderAnnualPresence();};
   if($("annualPresenceModal")) $("annualPresenceModal").onclick=e=>{if(e.target===$("annualPresenceModal"))closeAnnualPresence();};
