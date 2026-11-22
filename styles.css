@@ -837,3 +837,38 @@ main > header.app-header .header-identity{
   .planning-display-filters{grid-template-columns:1fr!important}
   .planning-metrics>*,.planning-annual-metrics>*{flex:1 1 100%!important}
 }
+
+/* V1.81 — Mise en avant de la ligne de l'utilisateur connecté */
+.planning-table tbody tr.planning-self-row td{
+  background:#f3f7ff;
+  box-shadow:inset 0 1px 0 #dce7fb,inset 0 -1px 0 #dce7fb;
+}
+.planning-table tbody tr.planning-self-row td.resource-col{
+  background:#edf4ff;
+  border-left:4px solid #4f73c8;
+  padding-left:10px;
+}
+.planning-table tbody tr.planning-self-row td.team-col{background:#f1f6ff}
+.planning-table tbody tr.planning-self-row td.weekend{background:#fff8e8}
+.planning-table tbody tr.planning-self-row .resource-avatar{
+  background:#dce8ff;
+  color:#315aa8;
+  box-shadow:0 0 0 2px #bcd0f7;
+}
+.planning-self-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:20px;
+  padding:0 7px;
+  border-radius:999px;
+  background:#e8efff;
+  color:#315aa8;
+  border:1px solid #bfd0f4;
+  font-size:9px;
+  font-weight:900;
+  flex:0 0 auto;
+}
+@media(max-width:700px){
+  .planning-self-badge{padding:0 5px;font-size:8px}
+}
