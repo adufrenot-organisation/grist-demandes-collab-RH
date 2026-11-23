@@ -1,4 +1,4 @@
-const VERSION="V1.94";
+const VERSION="V1.95";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS",importConfig:"PARAM_IMPORT_CONGES",importRuns:"IMPORT_CONGES",importLines:"IMPORT_CONGES_LIGNES"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null,planningRequestStart:"",planningRequestEnd:"",importConfigRows:[],importDrafts:[],importOcrWords:[],importFileName:"",importDetectedCount:0};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -1083,9 +1083,19 @@ function bindNav(){
 // V1.93 — Import annuel de congés depuis une image (OCR classique, sans IA générative)
 async function importTableExists(name){return gristTableExists(name)}
 async function ensureImportTables(){
-  if(!await importTableExists(T.importConfig))await grist.docApi.applyUserActions([["AddTable",T.importConfig,[
-    {id:"Code_Import",type:"Text",label:"Code import"},{id:"Motif",type:"Ref:"+T.motifs,label:"Motif RH"},{id:"Type_Demande",type:"Text",label:"Type demande"},{id:"Confiance_Min",type:"Int",label:"Confiance minimale"},{id:"Actif",type:"Bool",label:"Actif"},{id:"Commentaire",type:"Text",label:"Commentaire"}
-  ]]]);
+  let importConfigCreated=false;
+  if(!await importTableExists(T.importConfig)){await grist.docApi.applyUserActions([["AddTable",T.importConfig,[
+    {id:"Code_Import",type:"Text",label:"Code import"},{id:"Motif",type:"Ref:"+T.motifs,label:"Motif RH"},{id:"Type_Demande",type:"Text",label:"Type demande"},{id:"Confiance_Min",type:"Int",label:"Confiance minimale"},{id:"Actif",type:"Bool",label:"Actif"},{id:"Couleur_Attendue",type:"Text",label:"Couleur attendue"},{id:"Tolerance_Couleur",type:"Int",label:"Tolérance couleur"},{id:"Creer_Demande",type:"Bool",label:"Créer une demande"},{id:"Commentaire",type:"Text",label:"Commentaire"}
+  ]]]);importConfigCreated=true;}
+  if(!importConfigCreated){
+    let creerAjoute=false;
+    for(const col of [
+      {id:"Couleur_Attendue",type:"Text",label:"Couleur attendue"},
+      {id:"Tolerance_Couleur",type:"Int",label:"Tolérance couleur"},
+      {id:"Creer_Demande",type:"Bool",label:"Créer une demande"}
+    ]){try{await grist.docApi.applyUserActions([["AddColumn",T.importConfig,col.id,{type:col.type,label:col.label}]]);if(col.id==="Creer_Demande")creerAjoute=true;}catch(e){}}
+    if(creerAjoute){try{const existing=rows(await grist.docApi.fetchTable(T.importConfig));const t=grist.getTable(T.importConfig);for(const r of existing)await t.update({id:r.id,fields:{Creer_Demande:true}});}catch(e){}}
+  }
   if(!await importTableExists(T.importRuns))await grist.docApi.applyUserActions([["AddTable",T.importRuns,[
     {id:"Ressource",type:"Ref:"+T.resources,label:"Ressource"},{id:"Annee",type:"Int",label:"Année"},{id:"Fichier_Nom",type:"Text",label:"Fichier"},{id:"Date_Import",type:"DateTime:UTC",label:"Date import"},{id:"Importe_Par",type:"Text",label:"Importé par"},{id:"Statut",type:"Text",label:"Statut"},{id:"Nb_Codes_Detectes",type:"Int",label:"Codes détectés"},{id:"Nb_Demandes_Creees",type:"Int",label:"Demandes créées"},{id:"Nb_Erreurs",type:"Int",label:"Erreurs"},{id:"Message",type:"Text",label:"Message"}
   ]]]);
@@ -1101,23 +1111,39 @@ function showImportMsg(t,kind=""){const e=$("importCongesMsg");if(!e)return;e.te
 function showImportConfigMsg(t,kind=""){const e=$("importConfigMsg");if(!e)return;e.textContent=t;e.className=`alert ${kind}`;e.classList.remove("hidden")}
 function importCode(v){return norm(v).toUpperCase().replace(/[^A-Z0-9]/g,"")}
 function importActiveMappings(){return (S.importConfigRows||[]).filter(r=>F(r,"Actif")!==false&&importCode(F(r,"Code_Import"))&&rid(F(r,"Motif")))}
+function validHexColor(v){const x=norm(v).toUpperCase();return /^#[0-9A-F]{6}$/.test(x)?x:""}
+function hexRgb(hex){const x=validHexColor(hex);return x?{r:parseInt(x.slice(1,3),16),g:parseInt(x.slice(3,5),16),b:parseInt(x.slice(5,7),16)}:null}
+function rgbDistance(a,b){if(!a||!b)return 0;return Math.sqrt((a.r-b.r)**2+(a.g-b.g)**2+(a.b-b.b)**2)}
 async function renderImportConfigAdmin(){
   if(!(S.isAdmin||S.isOwner))return;
+  if(await importTableExists(T.importConfig))await ensureImportTables();
   const exists=await loadImportConfig();
   $("importConfigSetupText").innerHTML=exists?`<strong>${T.importConfig}</strong> disponible · ${S.importConfigRows.length} code(s).`:`<strong>${T.importConfig}</strong> absente.`;
   $("importConfigManager").classList.toggle("hidden",!exists);
   if(!exists)return;
   const body=$("importConfigRows");
-  const opts='<option value="">— Choisir —</option>'+S.motifs.map(m=>`<option value="${m.id}">${esc(F(m,"Code")||"")} · ${esc(F(m,"Libelle")||"")}</option>`).join("");
-  body.innerHTML=S.importConfigRows.length?S.importConfigRows.map(r=>`<tr><td><input data-ic-code="${r.id}" value="${esc(F(r,"Code_Import")||"")}" maxlength="12"></td><td><select data-ic-motif="${r.id}">${opts}</select></td><td><select data-ic-type="${r.id}"><option value="CONGE">Congé</option><option value="ABSENCE">Absence</option></select></td><td><input data-ic-conf="${r.id}" type="number" min="0" max="100" value="${Number(F(r,"Confiance_Min")||70)}"></td><td><input data-ic-active="${r.id}" type="checkbox" ${F(r,"Actif")!==false?'checked':''}></td><td><input data-ic-comment="${r.id}" value="${esc(F(r,"Commentaire")||"")}"></td><td><button class="table-action" data-ic-save="${r.id}">Enregistrer</button></td></tr>`).join(""):'<tr><td colspan="7">Aucun code configuré.</td></tr>';
-  for(const r of S.importConfigRows){const s=document.querySelector(`[data-ic-motif="${r.id}"]`);if(s)s.value=String(rid(F(r,"Motif"))||"");const t=document.querySelector(`[data-ic-type="${r.id}"]`);if(t)t.value=norm(F(r,"Type_Demande"))||"CONGE";}
+  const opts='<option value="">— Choisir —</option>'+S.motifs.map(m=>`<option value="${m.id}">${esc(F(m,"Code")||"")} · ${esc(F(m,"Libelle")||"")}${F(m,"Actif")===false?' (inactif)':''}</option>`).join("");
+  body.innerHTML=S.importConfigRows.length?S.importConfigRows.map(r=>`<tr>
+    <td><input data-ic-code="${r.id}" value="${esc(F(r,"Code_Import")||"")}" maxlength="12"></td>
+    <td><select data-ic-motif="${r.id}">${opts}</select></td>
+    <td><select data-ic-type="${r.id}"><option value="CONGE">Congé</option><option value="ABSENCE">Absence</option><option value="PRESENCE">Présence</option><option value="AUCUN_IMPACT">Aucun impact</option></select></td>
+    <td><input data-ic-conf="${r.id}" type="number" min="0" max="100" value="${Number(F(r,"Confiance_Min")??70)}"></td>
+    <td><input data-ic-color="${r.id}" class="import-color-text" value="${esc(validHexColor(F(r,"Couleur_Attendue"))||"")}" placeholder="#RRGGBB" maxlength="7"></td>
+    <td><input data-ic-tol="${r.id}" type="number" min="0" max="442" value="${Number(F(r,"Tolerance_Couleur")??80)}"></td>
+    <td><input data-ic-create="${r.id}" type="checkbox" ${F(r,"Creer_Demande")!==false?'checked':''}></td>
+    <td><input data-ic-active="${r.id}" type="checkbox" ${F(r,"Actif")!==false?'checked':''}></td>
+    <td><input data-ic-comment="${r.id}" value="${esc(F(r,"Commentaire")||"")}"></td>
+    <td><button class="table-action" data-ic-save="${r.id}">Enregistrer</button></td>
+  </tr>`).join(""):'<tr><td colspan="10">Aucun code configuré.</td></tr>';
+  for(const r of S.importConfigRows){const m=document.querySelector(`[data-ic-motif="${r.id}"]`);if(m)m.value=String(rid(F(r,"Motif"))||"");const t=document.querySelector(`[data-ic-type="${r.id}"]`);if(t)t.value=norm(F(r,"Type_Demande"))||"CONGE";}
   document.querySelectorAll('[data-ic-save]').forEach(b=>b.onclick=()=>saveImportConfigRow(Number(b.dataset.icSave)).catch(e=>showImportConfigMsg(e?.message||String(e),"danger")));
 }
 async function saveImportConfigRow(id){
   const code=importCode(document.querySelector(`[data-ic-code="${id}"]`)?.value),motif=Number(document.querySelector(`[data-ic-motif="${id}"]`)?.value||0);if(!code||!motif)throw new Error("Code import et motif RH obligatoires.");
-  await grist.getTable(T.importConfig).update({id,fields:{Code_Import:code,Motif:motif,Type_Demande:document.querySelector(`[data-ic-type="${id}"]`)?.value||"CONGE",Confiance_Min:Number(document.querySelector(`[data-ic-conf="${id}"]`)?.value||70),Actif:!!document.querySelector(`[data-ic-active="${id}"]`)?.checked,Commentaire:norm(document.querySelector(`[data-ic-comment="${id}"]`)?.value)}});await renderImportConfigAdmin();showImportConfigMsg(`Code ${code} enregistré.`);
+  const colorRaw=norm(document.querySelector(`[data-ic-color="${id}"]`)?.value),color=colorRaw?validHexColor(colorRaw):"";if(colorRaw&&!color)throw new Error("La couleur attendue doit être au format #RRGGBB.");
+  await grist.getTable(T.importConfig).update({id,fields:{Code_Import:code,Motif:motif,Type_Demande:document.querySelector(`[data-ic-type="${id}"]`)?.value||"CONGE",Confiance_Min:Number(document.querySelector(`[data-ic-conf="${id}"]`)?.value||70),Couleur_Attendue:color,Tolerance_Couleur:Number(document.querySelector(`[data-ic-tol="${id}"]`)?.value||80),Creer_Demande:!!document.querySelector(`[data-ic-create="${id}"]`)?.checked,Actif:!!document.querySelector(`[data-ic-active="${id}"]`)?.checked,Commentaire:norm(document.querySelector(`[data-ic-comment="${id}"]`)?.value)}});await renderImportConfigAdmin();showImportConfigMsg(`Code ${code} enregistré.`);
 }
-async function addImportConfigRow(){await ensureImportTables();await grist.getTable(T.importConfig).create({fields:{Code_Import:"",Type_Demande:"CONGE",Confiance_Min:70,Actif:true}});await renderImportConfigAdmin()}
+async function addImportConfigRow(){await ensureImportTables();await grist.getTable(T.importConfig).create({fields:{Code_Import:"",Type_Demande:"CONGE",Confiance_Min:70,Tolerance_Couleur:80,Creer_Demande:true,Actif:true}});await renderImportConfigAdmin()}
 function fillImportResourceSelect(){
   const s=$("importResource");if(!s)return;const list=importAccessibleResources();s.innerHTML=list.map(r=>`<option value="${r.id}">${esc(F(r,"Nom")||F(r,"Email")||("#"+r.id))}</option>`).join("");if(S.person&&list.some(r=>r.id===S.person.id))s.value=String(S.person.id);s.disabled=list.length===1;
 }
@@ -1151,33 +1177,43 @@ function isoFromYMD(y,m,d){const dt=new Date(Date.UTC(y,m-1,d));if(dt.getUTCFull
 function groupImportDetections(items){
   const sorted=items.slice().sort((a,b)=>a.date.localeCompare(b.date));const groups=[];
   for(const it of sorted){const last=groups.at(-1);if(last&&last.code===it.code&&last.motifId===it.motifId){const a=new Date(last.end+'T00:00:00Z'),b=new Date(it.date+'T00:00:00Z'),gap=Math.round((b-a)/86400000);let merge=gap===1;if(!merge&&gap<=4){merge=true;for(let i=1;i<gap;i++){const x=new Date(a.getTime()+i*86400000).toISOString().slice(0,10);if(isCountablePresenceDay(x)){merge=false;break}}}if(merge){last.end=it.date;last.conf.push(it.conf);continue}}
-    groups.push({code:it.code,motifId:it.motifId,type:it.type,start:it.date,end:it.date,conf:[it.conf],minConf:it.minConf});
+    groups.push({code:it.code,motifId:it.motifId,type:it.type,start:it.date,end:it.date,conf:[it.conf],minConf:it.minConf,createRequest:it.createRequest!==false,colorExpected:it.colorExpected||""});
   }
-  return groups.map(g=>({...g,confidence:Math.round(g.conf.reduce((a,b)=>a+b,0)/g.conf.length),selected:Math.round(g.conf.reduce((a,b)=>a+b,0)/g.conf.length)>=g.minConf}));
+  return groups.map(g=>{const confidence=Math.round(g.conf.reduce((a,b)=>a+b,0)/g.conf.length);return {...g,confidence,selected:g.createRequest&&confidence>=g.minConf}});
+}
+async function importImageCanvas(file){
+  const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error("Image illisible."));i.src=URL.createObjectURL(file)});
+  const c=document.createElement("canvas");c.width=img.naturalWidth||img.width;c.height=img.naturalHeight||img.height;const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(img,0,0,c.width,c.height);return {canvas:c,ctx};
+}
+function representativeWordColor(ctx,w){
+  if(!ctx||!w?.bbox)return null;const b=w.bbox,x0=Math.max(0,Math.floor(b.x0-3)),y0=Math.max(0,Math.floor(b.y0-3)),x1=Math.min(ctx.canvas.width,Math.ceil(b.x1+3)),y1=Math.min(ctx.canvas.height,Math.ceil(b.y1+3));if(x1<=x0||y1<=y0)return null;
+  const data=ctx.getImageData(x0,y0,x1-x0,y1-y0).data,px=[];for(let i=0;i<data.length;i+=4){const r=data[i],g=data[i+1],bb=data[i+2],max=Math.max(r,g,bb),min=Math.min(r,g,bb);if(max-min>24&&max>70)px.push({r,g,b:bb});}
+  if(!px.length)return null;px.sort((a,b)=>(a.r+a.g+a.b)-(b.r+b.g+b.b));return px[Math.floor(px.length/2)];
 }
 async function analyzeImportImage(){
   const file=$("importImage")?.files?.[0];if(!file)throw new Error("Sélectionnez une image à analyser.");if(!window.Tesseract)throw new Error("Le moteur OCR n’a pas pu être chargé. Vérifiez l’accès au CDN Tesseract.js.");
+  if(await importTableExists(T.importConfig))await ensureImportTables();
   await loadImportConfig();const maps=importActiveMappings();if(!maps.length)throw new Error("Aucun code actif dans PARAM_IMPORT_CONGES.");
   const resourceId=Number($("importResource").value||0),year=Number($("importYear").value||0);if(!resourceId||!year)throw new Error("Ressource et année obligatoires.");
   S.importFileName=file.name;S.importDrafts=[];showImportMsg("Analyse OCR en cours…");
-  const result=await Tesseract.recognize(file,'fra',{logger:m=>{if(m.status==='recognizing text')showImportMsg(`OCR : ${Math.round((m.progress||0)*100)} %`)}});
+  const [{ctx},result]=await Promise.all([importImageCanvas(file),Tesseract.recognize(file,'fra',{logger:m=>{if(m.status==='recognizing text')showImportMsg(`OCR : ${Math.round((m.progress||0)*100)} %`)}})]);
   const words=result?.data?.words||[];if(!words.length)throw new Error("Aucun texte exploitable détecté dans l’image.");S.importOcrWords=words;
   const grid=detectGridFromWords(words),byCode=new Map(maps.map(r=>[importCode(F(r,"Code_Import")),r])),detections=[];
   const dayVals=Object.values(grid.dayX),monthVals=Object.values(grid.monthY);const daySpacing=dayVals.length>1?(Math.max(...dayVals)-Math.min(...dayVals))/(dayVals.length-1):30,monthSpacing=(Math.max(...monthVals)-Math.min(...monthVals))/11;
-  for(const w of words){const code=importNormalizeWord(w);const map=byCode.get(code);if(!map)continue;const c=wordCenter(w),nd=nearestKey(grid.dayX,c.x),nm=nearestKey(grid.monthY,c.y);if(!nd.key||!nm.key||nd.dist>daySpacing*.65||nm.dist>Math.abs(monthSpacing)*.48)continue;const date=isoFromYMD(year,nm.key,nd.key);if(!date)continue;detections.push({date,code,motifId:rid(F(map,"Motif")),type:norm(F(map,"Type_Demande"))||"CONGE",conf:Number(w.confidence||0),minConf:Number(F(map,"Confiance_Min")||70)});}
+  for(const w of words){const code=importNormalizeWord(w);const map=byCode.get(code);if(!map)continue;const c=wordCenter(w),nd=nearestKey(grid.dayX,c.x),nm=nearestKey(grid.monthY,c.y);if(!nd.key||!nm.key||nd.dist>daySpacing*.65||nm.dist>Math.abs(monthSpacing)*.48)continue;const date=isoFromYMD(year,nm.key,nd.key);if(!date)continue;const expected=validHexColor(F(map,"Couleur_Attendue")),sample=expected?representativeWordColor(ctx,w):null,tol=Math.max(0,Number(F(map,"Tolerance_Couleur")??80));if(expected&&sample&&rgbDistance(hexRgb(expected),sample)>tol)continue;detections.push({date,code,motifId:rid(F(map,"Motif")),type:norm(F(map,"Type_Demande"))||"CONGE",conf:Number(w.confidence||0),minConf:Number(F(map,"Confiance_Min")||70),createRequest:F(map,"Creer_Demande")!==false,colorExpected:expected});}
   const unique=new Map();for(const d of detections){const k=`${d.date}|${d.code}`;if(!unique.has(k)||unique.get(k).conf<d.conf)unique.set(k,d)}
   S.importDetectedCount=unique.size;S.importDrafts=groupImportDetections([...unique.values()]);renderImportDrafts();showImportMsg(`${unique.size} cellule(s) reconnue(s) · ${S.importDrafts.length} période(s) préparée(s).`);
 }
 function renderImportDrafts(){
   const body=$("importDraftRows"),btn=$("importCreateRequestsBtn");if(!body)return;const list=S.importDrafts||[];
-  body.innerHTML=list.length?list.map((d,i)=>`<tr class="${d.selected?'':'import-low-confidence'}"><td><input type="checkbox" data-import-select="${i}" ${d.selected?'checked':''}></td><td><strong>${esc(d.code)}</strong></td><td>${esc(motifName(d.motifId))}</td><td>${dt(ep(d.start))}</td><td>${dt(ep(d.end))}</td><td><span class="import-confidence ${d.confidence>=d.minConf?'ok':'warn'}">${d.confidence}%</span></td></tr>`).join(''):'<tr><td colspan="6">Aucun brouillon. Chargez une image puis lancez l’analyse.</td></tr>';
+  body.innerHTML=list.length?list.map((d,i)=>`<tr class="${d.createRequest?(d.selected?'':'import-low-confidence'):'import-no-request'}"><td><input type="checkbox" data-import-select="${i}" ${d.selected?'checked':''} ${d.createRequest?'':'disabled'}></td><td><strong>${esc(d.code)}</strong></td><td>${esc(motifName(d.motifId))}</td><td>${dt(ep(d.start))}</td><td>${dt(ep(d.end))}</td><td><span class="import-confidence ${d.confidence>=d.minConf?'ok':'warn'}">${d.confidence}%</span></td><td><span class="state ${d.createRequest?'ok':'off'}">${d.createRequest?'Demande':'Reconnu uniquement'}</span></td></tr>`).join(''):'<tr><td colspan="7">Aucun brouillon. Chargez une image puis lancez l’analyse.</td></tr>';
   document.querySelectorAll('[data-import-select]').forEach(c=>c.onchange=()=>{S.importDrafts[Number(c.dataset.importSelect)].selected=c.checked;updateImportCreateButton()});updateImportCreateButton();
 }
 function updateImportCreateButton(){const b=$("importCreateRequestsBtn");if(b)b.disabled=!(S.importDrafts||[]).some(x=>x.selected)}
 async function createImportedRequests(){
-  const selected=(S.importDrafts||[]).filter(x=>x.selected);if(!selected.length)throw new Error("Aucune période sélectionnée.");const resourceId=Number($("importResource").value||0),resource=(S.resources||[]).find(r=>r.id===resourceId);if(!resource)throw new Error("Ressource introuvable.");
-  await ensureImportTables();const now=Math.floor(Date.now()/1000),who=email(S.user?.email)||email(F(S.person||{},"Email"))||"";const runCreated=await grist.getTable(T.importRuns).create({fields:{Ressource:resourceId,Annee:Number($("importYear").value),Fichier_Nom:S.importFileName||"",Date_Import:now,Importe_Par:who,Statut:"EN_COURS",Nb_Codes_Detectes:Number(S.importDetectedCount||0),Nb_Demandes_Creees:0,Nb_Erreurs:0,Message:"Création des demandes"}});const runId=Number(runCreated?.id||runCreated);let createdCount=0,errors=0;
-  for(const d of selected){try{const u=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`,fields={Reference:`IMP-${new Date().getFullYear()}-${u.slice(0,8).toUpperCase()}`,Demandeur:resourceId,Type:d.type||"CONGE",Type_Action:"DEMANDE",Date_Debut:ep(d.start),Date_Fin:ep(d.end),Motif:d.motifId,Motif_Code:motifCode(d.motifId),Commentaire_Demandeur:`Import OCR ${S.importFileName||''} · code ${d.code}`,Statut:"EN_ATTENTE",Date_Demande:now,Date_Modification:now,UUID_Demande:u,Version_Sync:1};const cr=await grist.getTable(T.requests).create({fields}),requestId=Number(cr?.id||cr);await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"CREEE",Demande_Creee:requestId,Message:"Demande EN_ATTENTE créée"}});createdCount++;}catch(e){errors++;await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"ERREUR",Message:e?.message||String(e)}})}}
+  const all=(S.importDrafts||[]),selected=all.filter(x=>x.createRequest&&x.selected);if(!all.length)throw new Error("Aucune période détectée.");const resourceId=Number($("importResource").value||0),resource=(S.resources||[]).find(r=>r.id===resourceId);if(!resource)throw new Error("Ressource introuvable.");
+  await ensureImportTables();const now=Math.floor(Date.now()/1000),who=email(S.user?.email)||email(F(S.person||{},"Email"))||"";const runCreated=await grist.getTable(T.importRuns).create({fields:{Ressource:resourceId,Annee:Number($("importYear").value),Fichier_Nom:S.importFileName||"",Date_Import:now,Importe_Par:who,Statut:"EN_COURS",Nb_Codes_Detectes:Number(S.importDetectedCount||0),Nb_Demandes_Creees:0,Nb_Erreurs:0,Message:"Validation de l’import"}});const runId=Number(runCreated?.id||runCreated);let createdCount=0,errors=0;
+  for(const d of all){if(!d.createRequest){await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"RECONNU_SANS_DEMANDE",Message:"Code reconnu · aucune demande configurée"}});continue;}if(!d.selected){await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"NON_SELECTIONNE",Message:"Période non sélectionnée pour création"}});continue;}try{const u=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`,fields={Reference:`IMP-${new Date().getFullYear()}-${u.slice(0,8).toUpperCase()}`,Demandeur:resourceId,Type:d.type||"CONGE",Type_Action:"DEMANDE",Date_Debut:ep(d.start),Date_Fin:ep(d.end),Motif:d.motifId,Motif_Code:motifCode(d.motifId),Commentaire_Demandeur:`Import OCR ${S.importFileName||''} · code ${d.code}`,Statut:"EN_ATTENTE",Date_Demande:now,Date_Modification:now,UUID_Demande:u,Version_Sync:1};const cr=await grist.getTable(T.requests).create({fields}),requestId=Number(cr?.id||cr);await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"CREEE",Demande_Creee:requestId,Message:"Demande EN_ATTENTE créée"}});createdCount++;}catch(e){errors++;await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"ERREUR",Message:e?.message||String(e)}})}}
   await grist.getTable(T.importRuns).update({id:runId,fields:{Statut:errors?"TERMINE_AVEC_ERREURS":"TERMINE",Nb_Demandes_Creees:createdCount,Nb_Erreurs:errors,Message:`${createdCount} demande(s) créée(s), ${errors} erreur(s).`}});S.importDrafts=[];renderImportDrafts();showImportMsg(`${createdCount} demande(s) créée(s) dans Demandes_RH. Elles seront prises en charge par la synchronisation.`,errors?"warn":"success");await load();
 }
 function renderAdmin(){
