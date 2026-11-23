@@ -1,4 +1,4 @@
-const VERSION="V1.96";
+const VERSION="V1.97";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS",importConfig:"PARAM_IMPORT_CONGES",importRuns:"IMPORT_CONGES",importLines:"IMPORT_CONGES_LIGNES"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null,planningRequestStart:"",planningRequestEnd:"",importConfigRows:[],importDrafts:[],importOcrWords:[],importFileName:"",importDetectedCount:0};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -1175,19 +1175,40 @@ function importNormalizeWord(w){return importCode(w?.text||w)}
 function wordCenter(w){const b=w.bbox||{};return {x:((b.x0||0)+(b.x1||0))/2,y:((b.y0||0)+(b.y1||0))/2}}
 const IMPORT_MONTHS={JANVIER:1,FEVRIER:2,FÉVRIER:2,MARS:3,AVRIL:4,MAI:5,JUIN:6,JUILLET:7,AOUT:8,AOÛT:8,SEPTEMBRE:9,OCTOBRE:10,NOVEMBRE:11,DECEMBRE:12,DÉCEMBRE:12};
 function normMonthWord(v){return norm(v).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z]/g,'')}
+function parseImportDayToken(v){
+  const raw=norm(v).replace(/[^0-9]/g,"");
+  if(!raw||raw.length>2)return null;
+  const d=Number(raw);return d>=1&&d<=31?d:null;
+}
+function reconstructDayColumns(dayRow){
+  const exact={};
+  for(const w of dayRow){const d=parseImportDayToken(w.text);if(d&&!exact[d])exact[d]=wordCenter(w).x}
+  const pts=Object.entries(exact).map(([d,x])=>({d:Number(d),x:Number(x)})).sort((a,b)=>a.d-b.d);
+  if(pts.length<3)return exact;
+  const n=pts.length,sd=pts.reduce((s,p)=>s+p.d,0),sx=pts.reduce((s,p)=>s+p.x,0),sdd=pts.reduce((s,p)=>s+p.d*p.d,0),sdx=pts.reduce((s,p)=>s+p.d*p.x,0),den=n*sdd-sd*sd;
+  if(!den)return exact;
+  const slope=(n*sdx-sd*sx)/den,intercept=(sx-slope*sd)/n;
+  if(!(slope>2))return exact;
+  const residual=Math.sqrt(pts.reduce((s,p)=>s+(p.x-(intercept+slope*p.d))**2,0)/n);
+  if(residual>Math.max(8,slope*.65))return exact;
+  const out={};for(let d=1;d<=31;d++)out[d]=exact[d]??(intercept+slope*d);
+  return out;
+}
 function detectGridFromWords(words){
-  const numeric=words.filter(w=>{const t=norm(w.text);return /^\d{1,2}$/.test(t)&&Number(t)>=1&&Number(t)<=31});
-  const bins=new Map();for(const w of numeric){const y=wordCenter(w).y,k=Math.round(y/12)*12;if(!bins.has(k))bins.set(k,[]);bins.get(k).push(w)}
-  const dayRow=[...bins.values()].sort((a,b)=>new Set(b.map(w=>Number(norm(w.text)))).size-new Set(a.map(w=>Number(norm(w.text)))).size)[0]||[];
-  const dayX={};for(const w of dayRow){const d=Number(norm(w.text));if(!dayX[d])dayX[d]=wordCenter(w).x}
+  const numeric=words.filter(w=>parseImportDayToken(w.text)!==null);
+  const bins=new Map();for(const w of numeric){const y=wordCenter(w).y,k=Math.round(y/20)*20;if(!bins.has(k))bins.set(k,[]);bins.get(k).push(w)}
+  const scored=[...bins.values()].map(row=>{const vals=[...new Set(row.map(w=>parseImportDayToken(w.text)).filter(Boolean))];return {row,score:vals.length,span:vals.length?(Math.max(...vals)-Math.min(...vals)):0}}).sort((a,b)=>(b.score*10+b.span)-(a.score*10+a.span));
+  const dayRow=scored[0]?.row||[];
+  const exactDays=[...new Set(dayRow.map(w=>parseImportDayToken(w.text)).filter(Boolean))];
+  const dayX=reconstructDayColumns(dayRow);
   const monthPoints=[];for(const w of words){const key=normMonthWord(w.text),m=IMPORT_MONTHS[key];if(m)monthPoints.push({m,y:wordCenter(w).y})}
   const uniq=new Map();for(const p of monthPoints)if(!uniq.has(p.m))uniq.set(p.m,p.y);
   const pts=[...uniq.entries()].map(([m,y])=>({m,y})).sort((a,b)=>a.m-b.m);
-  if(Object.keys(dayX).length<10)throw new Error("En-tête des jours 01–31 non détecté avec assez de fiabilité.");
+  if(exactDays.length<3||Object.keys(dayX).length<10)throw new Error("En-tête des jours insuffisamment reconnu. Il faut au moins 3 numéros de jours cohérents pour reconstruire la grille.");
   if(pts.length<6)throw new Error("Les lignes des mois ne sont pas suffisamment reconnues.");
   const n=pts.length,sm=pts.reduce((s,p)=>s+p.m,0),sy=pts.reduce((s,p)=>s+p.y,0),smm=pts.reduce((s,p)=>s+p.m*p.m,0),smy=pts.reduce((s,p)=>s+p.m*p.y,0),den=n*smm-sm*sm;
   const slope=den?(n*smy-sm*sy)/den:0,intercept=(sy-slope*sm)/n;const monthY={};for(let m=1;m<=12;m++)monthY[m]=uniq.get(m)??(intercept+slope*m);
-  return {dayX,monthY};
+  return {dayX,monthY,detectedDays:exactDays.length};
 }
 function nearestKey(map,value){let best=null,dist=Infinity;for(const [k,v] of Object.entries(map)){const d=Math.abs(v-value);if(d<dist){dist=d;best=Number(k)}}return {key:best,dist}}
 function isoFromYMD(y,m,d){const dt=new Date(Date.UTC(y,m-1,d));if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==m-1||dt.getUTCDate()!==d)return "";return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
