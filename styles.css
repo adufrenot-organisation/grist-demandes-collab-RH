@@ -938,3 +938,19 @@ main > header.app-header .header-identity{
 /* V1.88 — rubrique Documentation autonome */
 .documentation-title{margin-top:26px}
 .sidebar[data-open-section="docs"] .guide-nav{display:flex}
+
+/* V1.90 — documentation intégrée sans iframe */
+.guide-integrated-view{max-width:1180px;margin:0 auto}
+.guide-integrated-hero{padding:24px 4px 18px}.guide-integrated-hero h2{font-size:32px;letter-spacing:-.03em;margin:10px 0 6px}.guide-integrated-hero p{margin:0;color:var(--muted);font-size:15px}
+.guide-integrated-content{display:grid;gap:18px;padding-bottom:32px}
+.guide-integrated-content>.card{padding:24px;margin:0;box-shadow:var(--shadow);border:1px solid var(--line);border-radius:18px}
+.guide-integrated-content>.card h2{font-size:23px;margin:0 0 10px;letter-spacing:-.02em}
+.guide-integrated-content>.card h3{font-size:17px;margin:20px 0 8px}
+.guide-integrated-content .lead{color:var(--muted)}
+.guide-integrated-content .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.guide-integrated-content .mini{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fbfdff}.guide-integrated-content .mini strong{display:block;margin-bottom:5px}
+.guide-integrated-content .steps{counter-reset:step;display:grid;gap:10px}.guide-integrated-content .step{position:relative;padding:14px 14px 14px 52px;border:1px solid var(--line);border-radius:13px;background:#fff}.guide-integrated-content .step:before{counter-increment:step;content:counter(step);position:absolute;left:14px;top:13px;width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:#eaf2ff;color:#1e5ed1;font-weight:800}
+.guide-integrated-content .callout{border-left:4px solid var(--blue);background:#eef5ff;border-radius:12px;padding:14px 16px;margin:15px 0;color:#284267}.guide-integrated-content .callout.warn{border-left-color:#e6a200;background:#fff8e8;color:#6e4c00}.guide-integrated-content .callout.good{border-left-color:#1c9b58;background:#eefaf3;color:#185e39}.guide-integrated-content .callout.danger{border-left-color:#d43b52;background:#fff1f3;color:#7f2431}
+.guide-integrated-content table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:13px;overflow:hidden;margin:14px 0;background:#fff}.guide-integrated-content th,.guide-integrated-content td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);font-size:13px}.guide-integrated-content th{background:#f4f7fb;color:#31415f;font-size:11px;text-transform:uppercase;letter-spacing:.05em}.guide-integrated-content tr:last-child td{border-bottom:0}
+.guide-integrated-content .tag{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800}.guide-integrated-content .tag.green{background:#e9f8ef;color:#17834a}.guide-integrated-content .tag.orange{background:#fff4d8;color:#9a5b00}.guide-integrated-content .tag.red{background:#fff0f2;color:#b42335}.guide-integrated-content .kpi-row{display:flex;flex-wrap:wrap;gap:8px}.guide-integrated-content .kpi{padding:8px 11px;border:1px solid var(--line);border-radius:10px;background:#f9fbfe;font-size:12px;font-weight:750}
+@media(max-width:720px){.guide-integrated-content .grid{grid-template-columns:1fr}.guide-integrated-hero h2{font-size:27px}.guide-integrated-content>.card{padding:18px}.guide-integrated-content{overflow:hidden}.guide-integrated-content table{display:block;overflow:auto}}

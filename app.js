@@ -1,4 +1,4 @@
-const VERSION="V1.88";
+const VERSION="V1.90";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -320,7 +320,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",guides:"nav.guides",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder",syncParams:"nav.syncParams",syncRequests:"nav.syncRequests",planningParams:"nav.planningParams"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",guideUser:"nav.guides",guideManager:"nav.guides",guideAdmin:"nav.guides",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder",syncParams:"nav.syncParams",syncRequests:"nav.syncRequests",planningParams:"nav.planningParams"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -803,7 +803,7 @@ function renderLabelsManager(filter=""){
 }
 async function saveLabel(key){
   if(!(S.isAdmin||S.isOwner))return;
-  const input=document.querySelector(`[data-label-key="${CSS.escape(key)}"]`), value=norm(input?.value);
+  const input=document.querySelector(`.label-input[data-label-key="${CSS.escape(key)}"]`), value=norm(input?.value);
   if(!value)throw new Error("Le libellé ne peut pas être vide.");
   const r=S.labels.find(x=>norm(F(x,"Cle"))===key);
   if(r)await grist.docApi.applyUserActions([["UpdateRecord",T.labels,r.id,{Libelle:value}]]);
@@ -964,44 +964,24 @@ function setViewAs(id){
   showView("home");
 }
 
-const GUIDE_DEFS={
-  user:{label:"Guide utilisateur",src:"guides/Guide_utilisateur_RH_V1.81.html",notice:"Guide utilisateur · disponible pour tous les profils."},
-  manager:{label:"Guide manager",src:"guides/Guide_manager_RH_V1.81.html",notice:"Guide manager · disponible pour les profils MANAGER et PMO."},
-  admin:{label:"Guide administrateur",src:"guides/Guide_administrateur_RH_V1.81.html",notice:"Guide administrateur · réservé à l’OWNER."}
-};
 function managerGuideAllowed(){
   return isPmo()||currentProfile()==="MANAGER"||(S.managedResources||[]).length>0;
 }
-function guideAllowed(key){
-  if(key==="user")return true;
-  if(key==="manager")return managerGuideAllowed();
-  if(key==="admin")return !!S.isOwner;
-  return false;
-}
 function applyNavigationPermissions(){
-  // Documentation est visible pour tous. Administration reste réservée aux profils administratifs.
   $("documentationNav")?.classList.remove("hidden");
+  $("guideUserNav")?.classList.remove("hidden");
+  $("guideManagerNav")?.classList.toggle("hidden",!managerGuideAllowed());
+  $("guideAdminNav")?.classList.toggle("hidden",!S.isOwner);
   $("adminNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
   document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!S.isOwner));
   document.querySelectorAll(".manager-admin-only").forEach(el=>el.classList.toggle("hidden",!(S.isAdmin||S.isOwner)));
   document.querySelectorAll(".admin-config-only").forEach(el=>el.classList.toggle("hidden",!(S.isAdmin||S.isOwner)));
-  $("guideManagerBtn")?.classList.toggle("hidden",!managerGuideAllowed());
-  $("guideAdminBtn")?.classList.toggle("hidden",!S.isOwner);
-}
-function selectGuide(key){
-  const chosen=guideAllowed(key)?key:"user",def=GUIDE_DEFS[chosen];
-  document.querySelectorAll(".guide-tab").forEach(b=>b.classList.toggle("active",b.dataset.guide===chosen));
-  const frame=$("guideFrame");if(frame){frame.src=def.src;frame.title=def.label+" RH";}
-  const link=$("guideOpenExternal");if(link){link.href=def.src;link.setAttribute("aria-label",`Ouvrir ${def.label} dans un nouvel onglet`);}
-  const notice=$("guideNotice");if(notice)notice.textContent=def.notice;
-}
-function renderGuides(preferred="user"){
-  applyNavigationPermissions();
-  selectGuide(preferred);
 }
 
 function showView(name){
   if(S.viewAs && name==="new")return;
+  if(name==="guideManager"&&!managerGuideAllowed())return;
+  if(name==="guideAdmin"&&!S.isOwner)return;
   if(["resources","motifs","presenceMap","acl","sync"].includes(name)&&!S.isOwner)return;
   if(name==="managers"&&!(S.isAdmin||S.isOwner))return;
   if(name==="labels"&&!(S.isAdmin||S.isOwner))return;
@@ -1012,13 +992,12 @@ function showView(name){
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],guides:["page.guides","Documentation"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"],planningParams:["page.planningParams","Paramètres planning"]};
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],guideUser:["page.guides","Guide utilisateur"],guideManager:["page.guides","Guide manager"],guideAdmin:["page.guides","Guide administrateur"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"],planningParams:["page.planningParams","Paramètres planning"]};
   if(name==="presenceMap")setTimeout(()=>renderPresenceMapAdmin().catch(showPresenceMapError),0);
   if(name==="planning")setTimeout(()=>loadPlanning().catch(showPlanningError),0);
   if(name==="syncParams")setTimeout(()=>loadSyncParams().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger")),0);
   if(name==="syncRequests")setTimeout(()=>loadSyncRequests().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger")),0);
   if(name==="planningParams")setTimeout(()=>loadPlanningParams().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger")),0);
-  if(name==="guides")setTimeout(()=>renderGuides("user"),0);
   const t=titles[name];
   const pageTitle=$("pageTitle");
   if(pageTitle){
@@ -1985,7 +1964,6 @@ async function boot(){
   if($("refreshSyncRequestsBtn")) $("refreshSyncRequestsBtn").onclick=()=>loadSyncRequests().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger"));
   if($("syncCurrentYearBtn")) $("syncCurrentYearBtn").onclick=()=>setSyncCurrentYear();
   if($("createSyncRequestBtn")) $("createSyncRequestBtn").onclick=()=>createSyncRequest().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger"));
-  document.querySelectorAll(".guide-tab").forEach(btn=>btn.onclick=()=>selectGuide(btn.dataset.guide));
   $("save").onclick=()=>save().catch(fatal);
   $("newBtn").onclick=()=>{reset();showView("new")};
   $("cancelEdit").onclick=()=>{reset();showView("mine")};
@@ -2103,7 +2081,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","planning","all"],
-    docs: ["guides"],
+    docs: ["guideUser","guideManager","guideAdmin"],
     admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","syncParams","syncRequests","planningParams","sync"]
   };
 
