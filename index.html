@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.95</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.96</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js"></script></head>
 <body>
@@ -8,7 +8,7 @@
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.95</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
+<div class="version version-brand">V1.96</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-request-menu="true" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -225,7 +225,7 @@
  <div class="pagehead"><div><span class="pill adminpill">IMPORT</span><h2 data-label-key="page.importConfig">Paramètres import congés</h2><p>Associez les codes présents sur les images aux motifs RH utilisés pour créer les demandes automatiques.</p></div></div>
  <div id="importConfigMsg" class="alert hidden"></div>
  <div class="card"><div class="section-head"><div><h3>Tables du module d’import</h3><p id="importConfigSetupText">Vérification…</p></div><button id="initImportTablesBtn" class="primary" type="button">Initialiser / compléter</button></div></div>
- <div id="importConfigManager" class="card hidden"><div class="section-head"><div><h3>Correspondance OCR → Demande RH</h3><p>Chaque code OCR peut être associé à n’importe quel motif RH. Les codes purement informatifs peuvent être reconnus sans créer de demande.</p></div><button id="addImportConfigRowBtn" class="secondary" type="button">＋ Ajouter un code</button></div><div class="tablewrap"><table><thead><tr><th>Code OCR</th><th>Motif RH</th><th>Type</th><th>Confiance min.</th><th>Couleur attendue</th><th>Tolérance</th><th>Créer demande</th><th>Actif</th><th>Commentaire</th><th></th></tr></thead><tbody id="importConfigRows"></tbody></table></div></div>
+ <div id="importConfigManager" class="card hidden"><div class="import-defaults"><div><h3>Valeurs par défaut</h3><p>Utilisées lors de l’ajout d’un nouveau code et comme secours lorsqu’une correspondance n’a pas de motif spécifique.</p></div><label>Type par défaut<select id="importDefaultType"><option value="PRESENCE">Présence</option><option value="CONGE">Congé</option><option value="ABSENCE">Absence</option><option value="AUCUN_IMPACT">Aucun impact</option></select></label><label>Motif RH par défaut<select id="importDefaultMotif"></select></label><button id="saveImportDefaultsBtn" class="primary" type="button">Enregistrer les défauts</button></div><div class="section-head"><div><h3>Correspondance OCR → Demande RH</h3><p>Chaque code OCR peut être associé à n’importe quel motif RH. Les codes purement informatifs peuvent être reconnus sans créer de demande.</p></div><button id="addImportConfigRowBtn" class="secondary" type="button">＋ Ajouter un code</button></div><div class="tablewrap"><table><thead><tr><th>Code OCR</th><th>Motif RH</th><th>Type</th><th>Confiance min.</th><th>Couleur attendue</th><th>Tolérance</th><th>Créer demande</th><th>Actif</th><th>Commentaire</th><th></th></tr></thead><tbody id="importConfigRows"></tbody></table></div></div>
  <div class="card"><div class="admin-content"><strong>Tables utilisées</strong><p><code>PARAM_IMPORT_CONGES</code> : correspondances OCR. <code>IMPORT_CONGES</code> : historique d’import. <code>IMPORT_CONGES_LIGNES</code> : lignes détectées et demandes créées.</p></div></div>
 </section>
 <section id="view-planningParams" class="view adminview">

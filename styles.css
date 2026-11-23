@@ -968,3 +968,6 @@ main > header.app-header .header-identity{
 .import-color-text{min-width:100px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase}
 .import-no-request{opacity:.82}
 #importConfigManager table{min-width:1220px}
+
+/* V1.96 — valeurs par défaut import OCR */
+.import-defaults{display:grid;grid-template-columns:minmax(260px,1fr) minmax(180px,240px) minmax(260px,360px) auto;gap:16px;align-items:end;padding:20px;border-bottom:1px solid var(--line,#dce3ef);background:#f8fafc}.import-defaults h3{margin:0 0 4px}.import-defaults p{margin:0;color:var(--muted,#64748b)}.import-defaults label{display:flex;flex-direction:column;gap:6px;font-weight:600}.import-defaults select{min-height:42px}@media(max-width:900px){.import-defaults{grid-template-columns:1fr}.import-defaults .primary{width:100%}}
