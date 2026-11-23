@@ -1,4 +1,4 @@
-const VERSION="V1.97";
+const VERSION="V1.98";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS",importConfig:"PARAM_IMPORT_CONGES",importRuns:"IMPORT_CONGES",importLines:"IMPORT_CONGES_LIGNES"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null,planningRequestStart:"",planningRequestEnd:"",importConfigRows:[],importDrafts:[],importOcrWords:[],importFileName:"",importDetectedCount:0};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -1194,21 +1194,37 @@ function reconstructDayColumns(dayRow){
   const out={};for(let d=1;d<=31;d++)out[d]=exact[d]??(intercept+slope*d);
   return out;
 }
-function detectGridFromWords(words){
+function pixelRowVariance(ctx,x,ys){
+  if(!ctx||!ys?.length)return 0;const vals=[];
+  for(const y0 of ys){const x0=Math.max(0,Math.min(ctx.canvas.width-1,Math.round(x))),y=Math.max(0,Math.min(ctx.canvas.height-1,Math.round(y0))),d=ctx.getImageData(x0,Math.max(0,y-2),1,Math.min(5,ctx.canvas.height-Math.max(0,y-2))).data;let r=0,g=0,b=0,n=0;for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];n++}if(n)vals.push([r/n,g/n,b/n]);}
+  if(vals.length<3)return 0;const mean=[0,1,2].map(c=>vals.reduce((s,v)=>s+v[c],0)/vals.length);return vals.reduce((s,v)=>s+((v[0]-mean[0])**2+(v[1]-mean[1])**2+(v[2]-mean[2])**2)/3,0)/vals.length;
+}
+function geometricDayColumns(ctx,monthWords,monthY){
+  if(!ctx)return {};const width=ctx.canvas.width,ys=Object.values(monthY).filter(Number.isFinite);if(ys.length<6||width<320)return {};
+  const monthBoxes=monthWords.map(w=>w.bbox||{}),maxMonthX1=Math.max(0,...monthBoxes.map(b=>Number(b.x1)||0));
+  const centers=monthWords.map(w=>wordCenter(w).x).filter(Number.isFinite).sort((a,b)=>a-b),medianCenter=centers.length?centers[Math.floor(centers.length/2)]:width*.05;
+  const minX=Math.max(Math.round(maxMonthX1+4),Math.round(width*.055)),maxX=Math.min(Math.round(width*.25),Math.round(width-31*6));let xStart=null;
+  for(let x=minX;x<=maxX;x++){let ok=true;for(let k=0;k<4;k++){if(pixelRowVariance(ctx,x+k,ys)<180){ok=false;break}}if(ok){xStart=x;break}}
+  if(xStart===null)xStart=Math.max(maxMonthX1+8,Math.min(width*.2,medianCenter*2.05));
+  let xEnd=width;for(let x=width-1;x>Math.max(width*.72,xStart+31*6);x--){if(pixelRowVariance(ctx,x,ys)>120){xEnd=Math.min(width,x+1);break}}
+  const usable=xEnd-xStart;if(!(usable>31*6))return {};const step=usable/31,out={};for(let d=1;d<=31;d++)out[d]=xStart+(d-.5)*step;return out;
+}
+function detectGridFromWords(words,ctx){
   const numeric=words.filter(w=>parseImportDayToken(w.text)!==null);
   const bins=new Map();for(const w of numeric){const y=wordCenter(w).y,k=Math.round(y/20)*20;if(!bins.has(k))bins.set(k,[]);bins.get(k).push(w)}
   const scored=[...bins.values()].map(row=>{const vals=[...new Set(row.map(w=>parseImportDayToken(w.text)).filter(Boolean))];return {row,score:vals.length,span:vals.length?(Math.max(...vals)-Math.min(...vals)):0}}).sort((a,b)=>(b.score*10+b.span)-(a.score*10+a.span));
   const dayRow=scored[0]?.row||[];
   const exactDays=[...new Set(dayRow.map(w=>parseImportDayToken(w.text)).filter(Boolean))];
-  const dayX=reconstructDayColumns(dayRow);
-  const monthPoints=[];for(const w of words){const key=normMonthWord(w.text),m=IMPORT_MONTHS[key];if(m)monthPoints.push({m,y:wordCenter(w).y})}
+  const monthPoints=[];for(const w of words){const key=normMonthWord(w.text),m=IMPORT_MONTHS[key];if(m)monthPoints.push({m,y:wordCenter(w).y,w})}
   const uniq=new Map();for(const p of monthPoints)if(!uniq.has(p.m))uniq.set(p.m,p.y);
   const pts=[...uniq.entries()].map(([m,y])=>({m,y})).sort((a,b)=>a.m-b.m);
-  if(exactDays.length<3||Object.keys(dayX).length<10)throw new Error("En-tête des jours insuffisamment reconnu. Il faut au moins 3 numéros de jours cohérents pour reconstruire la grille.");
   if(pts.length<6)throw new Error("Les lignes des mois ne sont pas suffisamment reconnues.");
   const n=pts.length,sm=pts.reduce((s,p)=>s+p.m,0),sy=pts.reduce((s,p)=>s+p.y,0),smm=pts.reduce((s,p)=>s+p.m*p.m,0),smy=pts.reduce((s,p)=>s+p.m*p.y,0),den=n*smm-sm*sm;
   const slope=den?(n*smy-sm*sy)/den:0,intercept=(sy-slope*sm)/n;const monthY={};for(let m=1;m<=12;m++)monthY[m]=uniq.get(m)??(intercept+slope*m);
-  return {dayX,monthY,detectedDays:exactDays.length};
+  let dayX=reconstructDayColumns(dayRow),mode="OCR";
+  if(exactDays.length<3||Object.keys(dayX).length<10){dayX=geometricDayColumns(ctx,monthPoints.map(p=>p.w),monthY);mode="GEOMETRIE";}
+  if(Object.keys(dayX).length<31)throw new Error("Impossible de reconstruire les 31 colonnes de jours à partir de l’image.");
+  return {dayX,monthY,detectedDays:exactDays.length,dayDetectionMode:mode};
 }
 function nearestKey(map,value){let best=null,dist=Infinity;for(const [k,v] of Object.entries(map)){const d=Math.abs(v-value);if(d<dist){dist=d;best=Number(k)}}return {key:best,dist}}
 function isoFromYMD(y,m,d){const dt=new Date(Date.UTC(y,m-1,d));if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==m-1||dt.getUTCDate()!==d)return "";return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
@@ -1236,11 +1252,11 @@ async function analyzeImportImage(){
   S.importFileName=file.name;S.importDrafts=[];showImportMsg("Analyse OCR en cours…");
   const [{ctx},result]=await Promise.all([importImageCanvas(file),Tesseract.recognize(file,'fra',{logger:m=>{if(m.status==='recognizing text')showImportMsg(`OCR : ${Math.round((m.progress||0)*100)} %`)}})]);
   const words=result?.data?.words||[];if(!words.length)throw new Error("Aucun texte exploitable détecté dans l’image.");S.importOcrWords=words;
-  const grid=detectGridFromWords(words),byCode=new Map(maps.map(r=>[importCode(F(r,"Code_Import")),r])),detections=[];
+  const grid=detectGridFromWords(words,ctx),byCode=new Map(maps.map(r=>[importCode(F(r,"Code_Import")),r])),detections=[];
   const dayVals=Object.values(grid.dayX),monthVals=Object.values(grid.monthY);const daySpacing=dayVals.length>1?(Math.max(...dayVals)-Math.min(...dayVals))/(dayVals.length-1):30,monthSpacing=(Math.max(...monthVals)-Math.min(...monthVals))/11;
   for(const w of words){const code=importNormalizeWord(w);const map=byCode.get(code);if(!map)continue;const c=wordCenter(w),nd=nearestKey(grid.dayX,c.x),nm=nearestKey(grid.monthY,c.y);if(!nd.key||!nm.key||nd.dist>daySpacing*.65||nm.dist>Math.abs(monthSpacing)*.48)continue;const date=isoFromYMD(year,nm.key,nd.key);if(!date)continue;const expected=validHexColor(F(map,"Couleur_Attendue")),sample=expected?representativeWordColor(ctx,w):null,tol=Math.max(0,Number(F(map,"Tolerance_Couleur")??80));if(expected&&sample&&rgbDistance(hexRgb(expected),sample)>tol)continue;detections.push({date,code,motifId:rid(F(map,"Motif"))||importDefaultMotifId(),type:norm(F(map,"Type_Demande"))||importDefaultType(),conf:Number(w.confidence||0),minConf:Number(F(map,"Confiance_Min")||70),createRequest:F(map,"Creer_Demande")!==false,colorExpected:expected});}
   const unique=new Map();for(const d of detections){const k=`${d.date}|${d.code}`;if(!unique.has(k)||unique.get(k).conf<d.conf)unique.set(k,d)}
-  S.importDetectedCount=unique.size;S.importDrafts=groupImportDetections([...unique.values()]);renderImportDrafts();showImportMsg(`${unique.size} cellule(s) reconnue(s) · ${S.importDrafts.length} période(s) préparée(s).`);
+  S.importDetectedCount=unique.size;S.importDrafts=groupImportDetections([...unique.values()]);renderImportDrafts();showImportMsg(`${unique.size} cellule(s) reconnue(s) · ${S.importDrafts.length} période(s) préparée(s) · jours: ${grid.dayDetectionMode==="GEOMETRIE"?"grille géométrique":"OCR"}.`);
 }
 function renderImportDrafts(){
   const body=$("importDraftRows"),btn=$("importCreateRequestsBtn");if(!body)return;const list=S.importDrafts||[];
