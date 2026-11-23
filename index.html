@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.81</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.84</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.81</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
+<div class="version version-brand">V1.84</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -16,17 +16,18 @@
   <button id="allRequestsNav" class="accordion-item accordion-space nav hidden" data-view="all">▦ <span>Autres demandes</span></button>
   <div id="adminNav" class="hidden">
     <div class="nav-title admin-title" data-accordion="admin">ADMINISTRATION <span class="acc-chevron">⌄</span></div>
+    <button class="accordion-item accordion-admin nav guide-nav" data-view="guides">? <span>Guides</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="resources">♙ <span>Ressources</span></button>
     <button class="accordion-item accordion-admin nav manager-admin-only" data-view="managers">♧ <span>Managers & Ressources</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="motifs">◇ <span>Motifs RH</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="presenceMap">↔ <span>Correspondance présence</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="acl">◈ <span>ACL & Permissions</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="debug">⌁ <span>Diagnostic</span></button>
-    <button class="accordion-item accordion-admin nav" data-view="labels">✎ <span>Libellés de l’application</span></button>
-    <button class="accordion-item accordion-admin nav" data-view="menuOrder">↕ <span>Ordre des menus</span></button>
-    <button class="accordion-item accordion-admin nav" data-view="syncParams">⚙ <span>Paramètres de synchro</span></button>
-    <button class="accordion-item accordion-admin nav" data-view="syncRequests">↻ <span>Demandes de synchro</span></button>
-    <button class="accordion-item accordion-admin nav" data-view="planningParams">▦ <span>Paramètres planning</span></button>
+    <button class="accordion-item accordion-admin nav admin-config-only" data-view="labels">✎ <span>Libellés de l’application</span></button>
+    <button class="accordion-item accordion-admin nav admin-config-only" data-view="menuOrder">↕ <span>Ordre des menus</span></button>
+    <button class="accordion-item accordion-admin nav admin-config-only" data-view="syncParams">⚙ <span>Paramètres de synchro</span></button>
+    <button class="accordion-item accordion-admin nav admin-config-only" data-view="syncRequests">↻ <span>Demandes de synchro</span></button>
+    <button class="accordion-item accordion-admin nav admin-config-only" data-view="planningParams">▦ <span>Paramètres planning</span></button>
     
   </div>
   <div class="syncmini" id="syncMini">
@@ -67,16 +68,27 @@
  <div id="planningMsg" class="alert hidden"></div>
  <div id="planningSetup" class="card planning-setup hidden"><div class="section-head"><div><h3>Table planning absente</h3><p id="planningSetupText"></p></div><button id="initPlanningBtn" class="primary hidden">Initialiser la table</button></div><div class="setup-hint">Cette table est esclave : elle doit être alimentée par la synchronisation depuis Cockpit RH, pas modifiée par les utilisateurs.</div></div>
  <div id="planningGrid" class="hidden">
-  <div class="card planning-filters">
-   <label>Équipe<select id="planningTeam"><option value="">Toutes les équipes</option></select></label>
-   <label class="planning-search"><span>⌕</span><input id="planningSearch" type="search" placeholder="Rechercher une ressource…"></label>
-   <div class="planning-resource-filter"><span class="planning-filter-label">Collaborateurs</span><details id="planningResourcesDetails"><summary id="planningResourceSummary">Tous les collaborateurs</summary><div class="planning-resource-popover"><div class="planning-resource-actions"><button id="planningResourcesAll" type="button" class="secondary compact">Tous</button></div><div id="planningResourceOptions" class="planning-resource-options"></div></div></details></div>
-   <label class="planning-date-filter">Début de période<input id="planningStartDate" type="date" aria-label="Choisir le début de la période"></label>
-   <label class="planning-weeks-filter">Durée<select id="planningWeeks" aria-label="Nombre de semaines affichées"><option value="2">2 semaines</option></select></label>
-   <button id="planningToday" class="planning-today">Aujourd’hui</button>
-   <div class="planning-range-nav"><button id="planningPrev" class="iconbtn" title="Période précédente">‹</button><strong id="planningRange"></strong><button id="planningNext" class="iconbtn" title="Période suivante">›</button></div>
+  <div class="card planning-annual-consultation">
+   <div class="planning-block-head"><div><span class="pill">ANNUEL</span><h3 data-label-key="planning.annual.title">Consultation annuelle par équipe</h3><p data-label-key="planning.annual.subtitle">Consultez les indicateurs annuels de présence et d’absence pour une équipe.</p></div></div>
+   <div class="planning-annual-controls">
+    <label>Équipe<select id="planningAnnualTeam"><option value="">Toutes les équipes</option></select></label>
+    <label>Année<select id="planningAnnualYear" aria-label="Année de consultation"></select></label>
+   </div>
+   <div class="planning-annual-metrics"><span id="planningAnnualLabel" class="planning-annual-label">Année —</span><span id="planningAnnualWorked" class="planning-annual-worked">Présence : —</span><span id="planningAnnualAbsence" class="planning-annual-absence">Absences : —</span><span id="planningAnnualPresenceRate" class="planning-annual-rate">Taux annuel : —</span><button id="planningAnnualByResourceBtn" type="button" class="planning-annual-by-resource-btn" data-label-key="planning.annual.byResource">Par ressources</button><button id="planningAnnualTeamAvailabilityBtn" type="button" class="planning-annual-by-resource-btn planning-team-availability-btn" data-label-key="planning.annual.availability">Disponibilité équipe</button></div>
   </div>
-  <div class="card planning-card"><div class="planning-toolbar"><div class="planning-metric-stack"><div class="planning-metrics"><span id="planningCount" class="planning-count">0 ressource affichée</span><span id="planningForecastCount" class="planning-forecast-count hidden"></span><span id="planningPresenceRate" class="planning-presence-rate">Taux de présence —</span></div><div class="planning-annual-metrics"><span id="planningAnnualLabel" class="planning-annual-label">Année —</span><span id="planningAnnualWorked" class="planning-annual-worked">Présence : —</span><span id="planningAnnualAbsence" class="planning-annual-absence">Absences : —</span><span id="planningAnnualPresenceRate" class="planning-annual-rate">Taux annuel : —</span><button id="planningAnnualByResourceBtn" type="button" class="planning-annual-by-resource-btn">Par ressources</button></div></div><div class="planning-display-filters" aria-label="Filtres d’affichage du planning"><label><input id="planningShowWorked" type="checkbox" checked><span><b class="presence-chip status-p">P</b> Jours travaillés</span></label><label><input id="planningShowAbsence" type="checkbox" checked><span><b class="presence-chip status-a">A</b> Absences</span></label><label><input id="planningShowForecast" type="checkbox" checked><span><b class="presence-chip status-ap">AP</b> Absences prévisionnelles</span></label></div><div class="planning-legend"><span class="planning-map-note">Selon PARAM_MOTIFS_PRESENCE</span></div><div class="planning-actions"><span class="readonly-badge">🔒 Lecture seule</span><button id="planningRefresh" class="iconbtn" title="Actualiser le planning">↻</button></div></div><div class="planning-tablewrap"><table class="planning-table"><thead><tr id="planningHead"></tr></thead><tbody id="planningBody"></tbody></table></div></div>
+  <div class="card planning-demand-card">
+   <div class="planning-block-head"><div><span class="pill">PÉRIODE</span><h3 data-label-key="planning.demand.title">Planification à la demande</h3><p data-label-key="planning.demand.subtitle">Choisissez une équipe, des collaborateurs et une période à afficher.</p></div></div>
+   <div class="planning-filters">
+    <label>Équipe<select id="planningTeam"><option value="">Toutes les équipes</option></select></label>
+    <label class="planning-search"><span>⌕</span><input id="planningSearch" type="search" placeholder="Rechercher une ressource…"></label>
+    <div class="planning-resource-filter"><span class="planning-filter-label">Collaborateurs</span><details id="planningResourcesDetails"><summary id="planningResourceSummary">Tous les collaborateurs</summary><div class="planning-resource-popover"><div class="planning-resource-actions"><button id="planningResourcesAll" type="button" class="secondary compact">Tous</button></div><div id="planningResourceOptions" class="planning-resource-options"></div></div></details></div>
+    <label class="planning-date-filter">Début de période<input id="planningStartDate" type="date" aria-label="Choisir le début de la période"></label>
+    <label class="planning-weeks-filter">Durée<select id="planningWeeks" aria-label="Nombre de semaines affichées"><option value="2">2 semaines</option></select></label>
+    <button id="planningToday" class="planning-today">Aujourd’hui</button>
+    <div class="planning-range-nav"><button id="planningPrev" class="iconbtn" title="Période précédente">‹</button><strong id="planningRange"></strong><button id="planningNext" class="iconbtn" title="Période suivante">›</button></div>
+   </div>
+  </div>
+  <div class="card planning-card"><div class="planning-toolbar"><div class="planning-metric-stack"><div class="planning-metrics"><span id="planningCount" class="planning-count">0 ressource affichée</span><span id="planningForecastCount" class="planning-forecast-count hidden"></span><span id="planningPresenceRate" class="planning-presence-rate">Taux de présence —</span></div></div><div class="planning-display-filters" aria-label="Filtres d’affichage du planning"><label><input id="planningShowWorked" type="checkbox" checked><span><b class="presence-chip status-p">P</b> Jours travaillés</span></label><label><input id="planningShowAbsence" type="checkbox" checked><span><b class="presence-chip status-a">A</b> Absences</span></label><label><input id="planningShowForecast" type="checkbox" checked><span><b class="presence-chip status-ap">AP</b> Absences prévisionnelles</span></label></div><div class="planning-actions"><span class="readonly-badge">🔒 Lecture seule</span><button id="planningRefresh" class="iconbtn" title="Actualiser le planning">↻</button></div></div><div class="planning-tablewrap"><table class="planning-table"><thead><tr id="planningHead"></tr></thead><tbody id="planningBody"></tbody></table></div></div>
  </div>
 </section>
 
@@ -94,7 +106,24 @@
 
 
 <div id="planningAnnualByResourceModal" class="modal hidden"><div class="modalbox planning-annual-resource-modal"><div class="modalhead"><div><span class="pill">ANNUEL</span><h3 id="planningAnnualByResourceTitle">Détail annuel par ressources</h3><p id="planningAnnualByResourceSubtitle" class="modal-subtitle"></p></div><button id="closePlanningAnnualByResource" class="iconbtn" type="button" aria-label="Fermer">×</button></div><div class="planning-annual-by-resource-tablewrap"><table class="planning-annual-resource-table"><thead><tr><th>Ressource</th><th>Équipe</th><th>Taux de présence</th><th>Jours d’absence</th></tr></thead><tbody id="planningAnnualByResourceBody"></tbody></table></div></div></div>
+<div id="planningAnnualTeamAvailabilityModal" class="modal hidden"><div class="modalbox planning-team-availability-modal"><div class="modalhead"><div><span class="pill">DISPONIBILITÉ ÉQUIPE</span><h3 id="planningAnnualTeamAvailabilityTitle">Disponibilité annuelle de l’équipe</h3><p id="planningAnnualTeamAvailabilitySubtitle" class="modal-subtitle"></p></div><button id="closePlanningAnnualTeamAvailability" class="iconbtn" type="button" aria-label="Fermer">×</button></div><div class="planning-team-availability-legend"><span><b class="presence-chip status-p">P</b> Présent</span><span><b class="presence-chip status-a">A</b> Absence</span><span><b class="presence-chip status-ap">AP</b> Absence prévisionnelle</span><span><b class="availability-off">WE</b> Week-end</span><span><b class="availability-off holiday">F</b> Jour férié</span></div><div id="planningAnnualTeamAvailabilityWrap" class="planning-team-availability-wrap"><table class="planning-team-availability-table"><thead id="planningAnnualTeamAvailabilityHead"></thead><tbody id="planningAnnualTeamAvailabilityBody"></tbody></table></div></div></div>
 <div id="annualPresenceModal" class="modal hidden"><div class="modalbox annual-presence-modal"><div class="modalhead"><div><span class="pill">PRÉSENCE ANNUELLE</span><h3 id="annualPresenceTitle">Calendrier de présence</h3><p id="annualPresenceSubtitle" class="modal-subtitle"></p></div><button id="closeAnnualPresence" class="iconbtn" type="button" aria-label="Fermer">×</button></div><div class="annual-presence-toolbar"><label>Année<select id="annualPresenceYear"></select></label><div class="annual-presence-kpis"><span id="annualPresenceRateKpi" class="annual-kpi rate">Taux de présence —</span><span id="annualAbsenceKpi" class="annual-kpi absence">0 jour d’absence</span></div></div><div class="annual-presence-legend"><span><b class="presence-chip status-p">P</b> Jour travaillé</span><span><b class="presence-chip status-a">A</b> Absence</span><span><b class="presence-chip status-ap">AP</b> Absence prévisionnelle</span></div><div id="annualPresenceCalendar" class="annual-calendar"></div></div></div>
+
+<section id="view-guides" class="view adminview guide-view">
+ <div class="pagehead"><div><span class="pill adminpill">DOCUMENTATION</span><h2>Guides</h2><p>Consultez la documentation disponible pour votre profil.</p></div></div>
+ <div class="card guide-card">
+  <div class="guide-toolbar">
+   <div class="guide-tabs" role="tablist" aria-label="Guides disponibles">
+    <button id="guideUserBtn" type="button" class="guide-tab active" data-guide="user">👤 Guide utilisateur</button>
+    <button id="guideManagerBtn" type="button" class="guide-tab hidden" data-guide="manager">👥 Guide manager</button>
+    <button id="guideAdminBtn" type="button" class="guide-tab hidden" data-guide="admin">⚙ Guide administrateur</button>
+   </div>
+   <a id="guideOpenExternal" class="secondary guide-open-external" href="guides/Guide_utilisateur_RH_V1.81.html" target="_blank" rel="noopener">Ouvrir seul ↗</a>
+  </div>
+  <div id="guideNotice" class="guide-notice">Guide utilisateur · disponible pour tous les profils.</div>
+  <iframe id="guideFrame" class="guide-frame" src="guides/Guide_utilisateur_RH_V1.81.html" title="Guide utilisateur RH"></iframe>
+ </div>
+</section>
 
 <section id="view-resources" class="view adminview">
 <div class="pagehead"><div><span class="pill adminpill">MASTER / SLAVE</span><h2>Ressources</h2><p>Référentiel en lecture seule, alimenté depuis Cockpit.Team.</p></div><button id="syncResourcesBtn" class="primary">↻ Rafraîchir</button></div>
@@ -187,6 +216,7 @@
   <div class="section-head"><div><h3>Durées disponibles</h3><p>Sélectionnez les choix de durée visibles dans le planning. De 1 à 8 semaines.</p></div></div>
   <div id="planningWeekChoices" class="planning-week-choices"></div>
   <div class="planning-default-row"><label>Durée par défaut<select id="planningDefaultWeeks"></select></label><button id="savePlanningParamsBtn" class="primary" type="button">Enregistrer</button></div>
+  <div class="planning-forecast-color-row"><div><h4>Couleur des absences prévisionnelles</h4><p>Cette couleur est utilisée pour toutes les pastilles et vues <strong>AP</strong>.</p></div><div class="presence-color-control"><label class="presence-color-picker" title="Choisir la couleur AP"><span id="planningForecastColorPreview" class="presence-color-preview" style="background:#FFD54F"></span><input id="planningForecastColor" type="color" value="#FFD54F" aria-label="Couleur des absences prévisionnelles"></label><input id="planningForecastColorHex" class="presence-color-hex" value="#FFD54F" maxlength="7" spellcheck="false" aria-label="Code hexadécimal de la couleur AP"><button id="planningForecastColorDefault" type="button" class="table-action small">Défaut</button></div></div>
  </div>
  <div class="card planning-kpi-admin">
   <div class="section-head"><div><h3>Visibilité des indicateurs</h3><p>Définissez les indicateurs visibles selon le rôle connecté. Une dérogation par ressource est prioritaire.</p><p id="planningKpiSetupText">Vérification…</p></div><button id="initPlanningKpiBtn" class="secondary" type="button">Initialiser / compléter</button></div>

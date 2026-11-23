@@ -1,6 +1,6 @@
-const VERSION="V1.80";
+const VERSION="V1.84";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 const DEBUG_KEY="rh_debug_enabled";
 function debugIsEnabled(){
@@ -253,9 +253,7 @@ async function load(){
   const [q,m,res]=await Promise.all([table(T.requests),table(T.motifs),table(T.resources)]);
   S.motifs=m; S.resources=res;
   S.isAdmin=norm(F(S.person,"Profil","profil")).toUpperCase()==="ADMIN";
-  $("adminNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
-  document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!S.isOwner));
-  document.querySelectorAll(".manager-admin-only").forEach(el=>el.classList.toggle("hidden",!(S.isAdmin||S.isOwner)));
+  applyNavigationPermissions();
   S.allRequests=q;
   S.myRequests=S.person?q.filter(r=>rid(F(r,"Demandeur"))===Number(S.person.id)):[];
   // Sécurité : q ne contient que ce que les ACL Grist autorisent réellement.
@@ -271,11 +269,11 @@ function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Co
 // V1.29 — libellés administrables localement dans Grist
 const LABEL_DEFS=[
  ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.planning","Menu","Planning présence"],["nav.all","Menu","Autres demandes"],
- ["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.planningParams","Menu","Paramètres planning"],["nav.motifs","Menu","Motifs RH"],["nav.presenceMap","Menu","Correspondance présence"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
+ ["nav.guides","Menu","Guides"],["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.planningParams","Menu","Paramètres planning"],["nav.motifs","Menu","Motifs RH"],["nav.presenceMap","Menu","Correspondance présence"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
  ["section.space","Menu","MON ESPACE"],["section.admin","Menu","ADMINISTRATION"],
  ["brand.title","En-tête","Demandes RH"],["brand.subtitle","En-tête","Portail collaborateur"],["header.eyebrow","En-tête","ESPACE RH"],
  ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.planning","Pages","Planning présence"],["page.all","Pages","Autres demandes"],
- ["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.planningParams","Pages","Paramètres planning"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
+ ["page.guides","Pages","Guides"],["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.planningParams","Pages","Paramètres planning"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
  ["home.pill","Accueil","Portail collaborateur"],["home.hero","Accueil","Gérez vos demandes simplement."],
  ["mine.pill","Mes demandes","SUIVI"],["mine.title","Mes demandes","Mes demandes"],["mine.subtitle","Mes demandes","Historique et état de traitement."],
  ["all.pill","Autres demandes","ADMIN"],["all.title","Autres demandes","Autres demandes"],
@@ -293,6 +291,9 @@ const LABEL_DEFS=[
  ["acl.pill","ACL","SECURITY CENTER"],["acl.title","ACL","ACL & Permissions"],["acl.audit","ACL","Audit des permissions"],
  ["motifs.pill","Motifs","RÉFÉRENTIEL LOCAL"],["motifs.new","Motifs","Nouveau motif"],["motifs.active","Motifs","Motif actif"],
  ["resources.title","Ressources","Ressources"],
+ ["planning.annual.title","Planning","Consultation annuelle par équipe"],["planning.annual.subtitle","Planning","Consultez les indicateurs annuels de présence et d’absence pour une équipe."],
+ ["planning.demand.title","Planning","Planification à la demande"],["planning.demand.subtitle","Planning","Choisissez une équipe, des collaborateurs et une période à afficher."],
+ ["planning.annual.byResource","Planning","Par ressources"],["planning.annual.availability","Planning","Disponibilité équipe"],
  ["nav.managers","Menu","Managers & Ressources"],["page.managers","Pages","Managers & Ressources"],["nav.menuOrder","Menu","Ordre des menus"],["page.menuOrder","Pages","Ordre des menus"],["nav.syncParams","Menu","Paramètres de synchro"],["page.syncParams","Pages","Paramètres de synchro"],["nav.syncRequests","Menu","Demandes de synchro"],["page.syncRequests","Pages","Demandes de synchro"],];
 const LABEL_BY_DEFAULT=Object.fromEntries(LABEL_DEFS.map(([k,c,d])=>[d,k]));
 function labelMap(){return Object.fromEntries((S.labels||[]).map(r=>[norm(F(r,"Cle")),norm(F(r,"Libelle"))]).filter(([k,v])=>k&&v))}
@@ -319,7 +320,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder",syncParams:"nav.syncParams",syncRequests:"nav.syncRequests",planningParams:"nav.planningParams"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",guides:"nav.guides",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder",syncParams:"nav.syncParams",syncRequests:"nav.syncRequests",planningParams:"nav.planningParams"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -344,6 +345,7 @@ const MENU_ORDER_DEFS={
     ["all","Autres demandes"]
   ],
   admin:[
+    ["guides","Guides"],
     ["resources","Ressources"],
     ["managers","Managers & Ressources"],
     ["motifs","Motifs RH"],
@@ -554,7 +556,8 @@ async function initPlanningParamsTable(){
   const existing=await table(T.planningParams),keys=new Set(existing.map(r=>norm(F(r,"Cle"))));
   const defs=[
     ["PLANNING_SEMAINES_DISPONIBLES","2,3,4","Durées proposées dans le planning, en semaines (1 à 8)"],
-    ["PLANNING_SEMAINES_DEFAUT","2","Durée sélectionnée par défaut dans le planning"]
+    ["PLANNING_SEMAINES_DEFAUT","2","Durée sélectionnée par défaut dans le planning"],
+    ["PLANNING_COULEUR_AP","#FFD54F","Couleur des absences prévisionnelles (AP)"]
   ];
   const actions=defs.filter(x=>!keys.has(x[0])).map(x=>["AddRecord",T.planningParams,null,{Cle:x[0],Valeur:x[1],Commentaire:x[2]}]);
   if(actions.length)await grist.docApi.applyUserActions(actions);
@@ -568,6 +571,7 @@ async function loadPlanningParams(){
   const setup=$("planningParamsSetupText");if(setup)setup.innerHTML=exists?`<strong>PARAM_PLANNING</strong> disponible · ${S.planningParams.length} paramètre(s).`:`<strong>PARAM_PLANNING</strong> absente.`;
   $("planningParamsManager")?.classList.toggle("hidden",!exists);
   if(exists&&$("planningParamsManager"))renderPlanningParamsAdmin();
+  applyForecastTheme();
   if($("planningWeeks"))renderPlanningWeekSelect();
 }
 function renderPlanningParamsAdmin(){
@@ -575,6 +579,9 @@ function renderPlanningParamsAdmin(){
   const box=$("planningWeekChoices");
   if(box)box.innerHTML=Array.from({length:8},(_,i)=>i+1).map(n=>`<label class="planning-week-choice"><input type="checkbox" value="${n}" ${allowed.has(n)?"checked":""}><span>${n} semaine${n>1?"s":""}</span></label>`).join("");
   const sel=$("planningDefaultWeeks");if(sel){sel.innerHTML=[...allowed].sort((a,b)=>a-b).map(n=>`<option value="${n}">${n} semaine${n>1?"s":""}</option>`).join("");sel.value=String(def);}
+  const ap=validHexColor(planningParamValue("PLANNING_COULEUR_AP","#FFD54F"))||"#ffd54f";
+  const picker=$("planningForecastColor"),hex=$("planningForecastColorHex"),preview=$("planningForecastColorPreview");
+  if(picker)picker.value=ap;if(hex)hex.value=ap.toUpperCase();if(preview)preview.style.background=ap;
 }
 async function savePlanningParams(){
   if(!(S.isAdmin||S.isOwner))return;
@@ -584,11 +591,12 @@ async function savePlanningParams(){
   const actualDefault=selected.includes(def)?def:selected[0];
   const tbl=grist.getTable(T.planningParams);
   const byKey=Object.fromEntries((S.planningParams||[]).map(r=>[norm(F(r,"Cle")),r]));
-  for(const [key,value] of [["PLANNING_SEMAINES_DISPONIBLES",selected.join(",")],["PLANNING_SEMAINES_DEFAUT",String(actualDefault)]]){
+  const apColor=validHexColor($("planningForecastColorHex")?.value)||validHexColor($("planningForecastColor")?.value)||"#ffd54f";
+  for(const [key,value] of [["PLANNING_SEMAINES_DISPONIBLES",selected.join(",")],["PLANNING_SEMAINES_DEFAUT",String(actualDefault)],["PLANNING_COULEUR_AP",apColor.toUpperCase()]]){
     if(byKey[key])await tbl.update({id:byKey[key].id,fields:{Valeur:value}});
-    else await tbl.create({fields:{Cle:key,Valeur:value,Commentaire:key.endsWith("DEFAUT")?"Durée sélectionnée par défaut dans le planning":"Durées proposées dans le planning, en semaines (1 à 8)"}});
+    else await tbl.create({fields:{Cle:key,Valeur:value,Commentaire:key==="PLANNING_COULEUR_AP"?"Couleur des absences prévisionnelles (AP)":key.endsWith("DEFAUT")?"Durée sélectionnée par défaut dans le planning":"Durées proposées dans le planning, en semaines (1 à 8)"}});
   }
-  await loadPlanningParams();S.planningWeeks=planningDefaultWeeks();renderPlanning();showSyncAdminMsg("planningParamsMsg","Paramètres du planning enregistrés.");
+  await loadPlanningParams();S.planningWeeks=planningDefaultWeeks();applyForecastTheme();renderPlanning();showSyncAdminMsg("planningParamsMsg","Paramètres du planning enregistrés.");
 }
 function renderPlanningWeekSelect(){
   const sel=$("planningWeeks");if(!sel)return;
@@ -596,6 +604,28 @@ function renderPlanningWeekSelect(){
   S.planningWeeks=current;
   sel.innerHTML=opts.map(n=>`<option value="${n}">${n} semaine${n>1?"s":""}</option>`).join("");
   sel.value=String(current);
+}
+
+function forecastColor(){
+  return validHexColor(planningParamValue("PLANNING_COULEUR_AP","#FFD54F"))||"#ffd54f";
+}
+function applyForecastTheme(){
+  const root=document.documentElement;if(!root)return;
+  const solid=forecastColor();
+  root.style.setProperty("--forecast-bg",rgbaFromHex(solid,.18)||solid);
+  root.style.setProperty("--forecast-border",rgbaFromHex(solid,.52)||solid);
+  root.style.setProperty("--forecast-text",darkenHex(solid,.5));
+  root.style.setProperty("--forecast-solid-bg",solid);
+  root.style.setProperty("--forecast-solid-border",solid);
+  root.style.setProperty("--forecast-solid-text",contrastColor(solid));
+}
+function syncPlanningForecastColorUi(color){
+  const c=validHexColor(color);if(!c)return false;
+  const picker=$("planningForecastColor"),hex=$("planningForecastColorHex"),preview=$("planningForecastColorPreview");
+  if(picker&&picker.value.toLowerCase()!==c)picker.value=c;
+  if(hex&&hex.value.toLowerCase()!==c)hex.value=c.toUpperCase();
+  if(preview)preview.style.background=c;
+  return true;
 }
 
 function planningCurrentRole(){
@@ -907,12 +937,14 @@ async function loadManagerContext(){
       .filter(id=>(S.resources||[]).some(r=>Number(r.id)===id))
       .map(id=>({id}));
 
+    applyNavigationPermissions();
     applyViewAs();
     render();
     if(S.planningReady)renderPlanning();
   }catch(e){
     console.warn("Mode manager indisponible:",e);
     S.managerLinks=[];S.managedResources=[];S.viewAs=null;
+    applyNavigationPermissions();
     applyViewAs();
     if(S.planningReady)renderPlanning();
   }
@@ -932,6 +964,41 @@ function setViewAs(id){
   showView("home");
 }
 
+const GUIDE_DEFS={
+  user:{label:"Guide utilisateur",src:"guides/Guide_utilisateur_RH_V1.81.html",notice:"Guide utilisateur · disponible pour tous les profils."},
+  manager:{label:"Guide manager",src:"guides/Guide_manager_RH_V1.81.html",notice:"Guide manager · disponible pour les profils MANAGER et PMO."},
+  admin:{label:"Guide administrateur",src:"guides/Guide_administrateur_RH_V1.81.html",notice:"Guide administrateur · réservé à l’OWNER."}
+};
+function managerGuideAllowed(){
+  return isPmo()||currentProfile()==="MANAGER"||(S.managedResources||[]).length>0;
+}
+function guideAllowed(key){
+  if(key==="user")return true;
+  if(key==="manager")return managerGuideAllowed();
+  if(key==="admin")return !!S.isOwner;
+  return false;
+}
+function applyNavigationPermissions(){
+  // Administration reste visible car le Guide utilisateur est accessible à tous.
+  $("adminNav")?.classList.remove("hidden");
+  document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!S.isOwner));
+  document.querySelectorAll(".manager-admin-only").forEach(el=>el.classList.toggle("hidden",!(S.isAdmin||S.isOwner)));
+  document.querySelectorAll(".admin-config-only").forEach(el=>el.classList.toggle("hidden",!(S.isAdmin||S.isOwner)));
+  $("guideManagerBtn")?.classList.toggle("hidden",!managerGuideAllowed());
+  $("guideAdminBtn")?.classList.toggle("hidden",!S.isOwner);
+}
+function selectGuide(key){
+  const chosen=guideAllowed(key)?key:"user",def=GUIDE_DEFS[chosen];
+  document.querySelectorAll(".guide-tab").forEach(b=>b.classList.toggle("active",b.dataset.guide===chosen));
+  const frame=$("guideFrame");if(frame){frame.src=def.src;frame.title=def.label+" RH";}
+  const link=$("guideOpenExternal");if(link){link.href=def.src;link.setAttribute("aria-label",`Ouvrir ${def.label} dans un nouvel onglet`);}
+  const notice=$("guideNotice");if(notice)notice.textContent=def.notice;
+}
+function renderGuides(preferred="user"){
+  applyNavigationPermissions();
+  selectGuide(preferred);
+}
+
 function showView(name){
   if(S.viewAs && name==="new")return;
   if(["resources","motifs","presenceMap","acl","sync"].includes(name)&&!S.isOwner)return;
@@ -944,12 +1011,13 @@ function showView(name){
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"],planningParams:["page.planningParams","Paramètres planning"]};
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],guides:["page.guides","Guides"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"],planningParams:["page.planningParams","Paramètres planning"]};
   if(name==="presenceMap")setTimeout(()=>renderPresenceMapAdmin().catch(showPresenceMapError),0);
   if(name==="planning")setTimeout(()=>loadPlanning().catch(showPlanningError),0);
   if(name==="syncParams")setTimeout(()=>loadSyncParams().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger")),0);
   if(name==="syncRequests")setTimeout(()=>loadSyncRequests().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger")),0);
   if(name==="planningParams")setTimeout(()=>loadPlanningParams().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger")),0);
+  if(name==="guides")setTimeout(()=>renderGuides("user"),0);
   const t=titles[name];
   const pageTitle=$("pageTitle");
   if(pageTitle){
@@ -976,7 +1044,7 @@ async function detectOwner(){
       dlog("owner.detect.match",{admin:{id:admin.id,email:S.ownerBootstrap.email,name:S.ownerBootstrap.name}});
     }
   }catch(e){console.warn("Détection Owner indisponible:",e)}
-  $("adminNav")?.classList.toggle("hidden",!S.isOwner);
+  applyNavigationPermissions();
 }
 function bindNav(){
   document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>showView(b.dataset.view));
@@ -1180,6 +1248,37 @@ function periodForecastCount(resourceIds,dates){
 }
 
 
+function planningAnnualAvailableYears(){
+  const years=new Set([Number(localIsoToday().slice(0,4))]);
+  for(const row of (S.planningRows||[])){const iso=planningIsoDate(F(row,"Date"));if(iso)years.add(Number(iso.slice(0,4)));}
+  return [...years].filter(Boolean).sort((a,b)=>b-a);
+}
+function renderPlanningAnnualConsultation(active,teamSet,canSeeAllTeams,ownTeam){
+  const sel=$("planningAnnualTeam");
+  let team=norm(S.planningAnnualTeam);
+  if(sel){
+    if(canSeeAllTeams){
+      const teams=[...teamSet].sort((a,b)=>a.localeCompare(b,"fr"));
+      sel.disabled=false;sel.innerHTML='<option value="">Toutes les équipes</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+      if(team&&teams.includes(team))sel.value=team;else{team="";sel.value="";}
+    }else{
+      sel.disabled=true;team=ownTeam||"";sel.innerHTML=team?`<option value="${esc(team)}">${esc(team)}</option>`:'<option value="">Mon équipe</option>';sel.value=team;
+    }
+  }
+  S.planningAnnualTeam=team;
+  const years=planningAnnualAvailableYears();
+  if(!S.planningAnnualYear||!years.includes(Number(S.planningAnnualYear)))S.planningAnnualYear=Number(localIsoToday().slice(0,4));
+  const yearSel=$("planningAnnualYear");if(yearSel){yearSel.innerHTML=years.map(y=>`<option value="${y}">${y}</option>`).join("");yearSel.value=String(S.planningAnnualYear);}
+  const annualYear=Number(S.planningAnnualYear);
+  const resources=(active||[]).filter(r=>{const t=norm(F(r,"Equipe_Code","Equipe","equipe"));return canSeeAllTeams?(!team||t===team):(ownTeam?t===ownTeam:Number(r.id)===Number(S.person?.id||0));}).sort((a,b)=>norm(F(a,"Nom")).localeCompare(norm(F(b,"Nom"),"fr")));
+  const ids=resources.map(r=>Number(r.id)),annualStats=annualConfirmedStats(ids,annualYear);
+  const annualLabel=$("planningAnnualLabel");if(annualLabel){annualLabel.textContent=`Année ${annualYear}`;annualLabel.title=`Indicateurs calculés du 1er janvier au 31 décembre ${annualYear}`;}
+  const annualWorked=$("planningAnnualWorked");if(annualWorked){annualWorked.textContent=`Présence : ${annualStats.worked} jour${annualStats.worked>1?"s":""}`;annualWorked.title=`Jours classés JOUR_TRAVAILLE sur l’année ${annualYear}, hors week-ends et jours fériés`;}
+  const annualAbsence=$("planningAnnualAbsence");if(annualAbsence){annualAbsence.textContent=`Absences : ${annualStats.absence} jour${annualStats.absence>1?"s":""}`;annualAbsence.title=`Jours classés ABSENCE sur l’année ${annualYear}, hors week-ends et jours fériés`;}
+  const annualRate=$("planningAnnualPresenceRate");if(annualRate){annualRate.textContent=annualStats.rate===null?"Taux annuel : —":`Taux annuel : ${annualStats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;annualRate.title=`${annualStats.worked} jour(s) travaillé(s) / ${annualStats.total} jour(s) classé(s) sur toute l’année ${annualYear}`;}
+  renderPlanningAnnualByResource(resources,annualYear);
+}
+
 function renderPlanningAnnualByResource(resources,year){
   S.planningAnnualByResourceData={resources:[...(resources||[])],year};
 }
@@ -1190,7 +1289,7 @@ function openPlanningAnnualByResource(){
   const title=$("planningAnnualByResourceTitle");
   const subtitle=$("planningAnnualByResourceSubtitle");
   if(title)title.textContent=`Détail annuel par ressources · ${year}`;
-  if(subtitle)subtitle.textContent=`${resources.length} ressource${resources.length>1?"s":""} dans le périmètre filtré`;
+  if(subtitle)subtitle.textContent=`${resources.length} ressource${resources.length>1?"s":""} dans l’équipe sélectionnée`;
   if(body){
     const rows=resources.map(r=>{
       const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,team=norm(F(r,"Equipe_Code","Equipe","equipe"))||"—";
@@ -1204,6 +1303,77 @@ function openPlanningAnnualByResource(){
 }
 function closePlanningAnnualByResource(){
   $("planningAnnualByResourceModal")?.classList.add("hidden");
+}
+
+function annualTeamAvailabilityData(){
+  const data=S.planningAnnualByResourceData||{resources:[],year:Number(localIsoToday().slice(0,4))};
+  return {resources:[...(data.resources||[])],year:Number(data.year||localIsoToday().slice(0,4))};
+}
+function annualYearDates(year){
+  const out=[];let d=`${year}-01-01`,end=`${year}-12-31`,guard=0;
+  while(d<=end&&guard<370){out.push(d);d=addDaysIso(d,1);guard++;}
+  return out;
+}
+function monthLabelFr(month){
+  return new Intl.DateTimeFormat("fr-FR",{month:"long"}).format(new Date(Date.UTC(2024,month-1,1))).replace(/^./,x=>x.toUpperCase());
+}
+function annualTeamMonthGroups(dates){
+  const groups=[];
+  for(const iso of dates){
+    const month=Number(iso.slice(5,7));
+    const prev=groups[groups.length-1];
+    if(prev&&prev.month===month)prev.count++;else groups.push({month,count:1});
+  }
+  return groups;
+}
+function annualConfirmedMapForResources(resources,year){
+  const ids=new Set((resources||[]).map(r=>Number(r.id)).filter(Boolean)),out=new Map();
+  for(const row of (S.planningRows||[])){
+    const resourceId=Number(rid(F(row,"Ressource"))||0);if(!resourceId||!ids.has(resourceId))continue;
+    const iso=planningIsoDate(F(row,"Date"));if(!iso||iso.slice(0,4)!==String(year))continue;
+    if(!out.has(resourceId))out.set(resourceId,new Map());
+    out.get(resourceId).set(iso,row);
+  }
+  return out;
+}
+function closePlanningAnnualTeamAvailability(){
+  $("planningAnnualTeamAvailabilityModal")?.classList.add("hidden");
+}
+function openPlanningAnnualTeamAvailability(){
+  const {resources,year}=annualTeamAvailabilityData();
+  const modal=$("planningAnnualTeamAvailabilityModal");if(!modal)return;
+  const title=$("planningAnnualTeamAvailabilityTitle"),subtitle=$("planningAnnualTeamAvailabilitySubtitle");
+  if(title)title.textContent=`Disponibilité équipe · ${year}`;
+  if(subtitle)subtitle.textContent=`${resources.length} ressource${resources.length>1?"s":""} · équipe annuelle sélectionnée`;
+  const dates=annualYearDates(year),months=annualTeamMonthGroups(dates),confirmed=annualConfirmedMapForResources(resources,year),forecast=forecastMapForDates(dates),holidays=frenchPublicHolidays(year);
+  const head=$("planningAnnualTeamAvailabilityHead"),body=$("planningAnnualTeamAvailabilityBody");
+  if(head){
+    const monthsRow=`<tr class="availability-month-row"><th class="availability-resource-head" rowspan="2">Ressource</th>${months.map(g=>`<th colspan="${g.count}">${esc(monthLabelFr(g.month))}</th>`).join("")}</tr>`;
+    const daysRow=`<tr class="availability-day-row">${dates.map(iso=>{const d=new Date(`${iso}T12:00:00Z`),dow=["dim","lun","mar","mer","jeu","ven","sam"][d.getUTCDay()],day=String(d.getUTCDate()).padStart(2,"0"),weekend=d.getUTCDay()===0||d.getUTCDay()===6,holiday=holidays.has(iso);return `<th class="${weekend?"weekend":""} ${holiday?"holiday":""}" title="${esc(frenchDateShort(iso))}"><span>${dow}</span><strong>${day}</strong></th>`}).join("")}</tr>`;
+    head.innerHTML=monthsRow+daysRow;
+  }
+  if(body){
+    body.innerHTML=resources.length?resources.map(r=>{
+      const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,canSeeDetails=canSeePlanningMotifDetails(id),rows=confirmed.get(id)||new Map(),forecastRows=forecast.get(id)||new Map();
+      const cells=dates.map(iso=>{
+        const d=new Date(`${iso}T12:00:00Z`),weekend=d.getUTCDay()===0||d.getUTCDay()===6,holiday=holidays.has(iso);
+        if(holiday)return `<td class="availability-off-cell holiday" title="Jour férié"><span>F</span></td>`;
+        if(weekend)return `<td class="availability-off-cell weekend" title="Week-end"><span>WE</span></td>`;
+        const row=rows.get(iso),display=planningDisplayForRow(row),forecastRequests=forecastRows.get(iso)||[];
+        let code="",title="";
+        if(forecastRequests.length){code="AP";title=canSeeDetails?`Absence prévisionnelle · ${forecastRequests.map(req=>motifName(rid(F(req,"Motif")))||"Absence").join(" / ")}`:"Absence prévisionnelle";}
+        else if(display.code==="A"){code="A";title=canSeeDetails?(planningOriginalMotifLabel(row)||norm(F(row,"Motif_Code"))||"Absence"):"Absence";}
+        else if(display.code==="P"){code="P";title=canSeeDetails?(planningOriginalMotifLabel(row)||norm(F(row,"Motif_Code"))||"Jour travaillé"):"Jour travaillé";}
+        if(!code)return `<td class="availability-empty" title="Aucune donnée"></td>`;
+        let motifColor="";
+        if(canSeeDetails&&code!=="AP"&&row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));
+        const style=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";
+        return `<td class="availability-status status-${code.toLowerCase()}" title="${esc(title)}"><span${style}>${esc(code)}</span></td>`;
+      }).join("");
+      return `<tr><th class="availability-resource-cell" title="${esc(name)}"><strong>${esc(name)}</strong></th>${cells}</tr>`;
+    }).join(""):'<tr><td class="planning-empty">Aucune ressource dans le périmètre filtré.</td></tr>';
+  }
+  modal.classList.remove("hidden");
 }
 
 function annualPresenceRateGlobal(){
@@ -1296,12 +1466,7 @@ function renderAnnualPresence(){
       const cls=code?`day-${code.toLowerCase()}`:"";
       const today=iso===localIsoToday()?"today":"";
       let motifColor="";
-      if(canSeeDetails&&code){
-        if(code==="AP"){
-          const motifIds=forecastRequests.map(req=>rid(F(req,"Motif"))).filter(Boolean);
-          if(motifIds.length===1)motifColor=presenceColorForMotif(motifIds[0]);
-        }else if(base?.row)motifColor=presenceColorForMotifCode(norm(F(base.row,"Motif_Code")));
-      }
+      if(canSeeDetails&&code&&code!=="AP"&&base?.row)motifColor=presenceColorForMotifCode(norm(F(base.row,"Motif_Code")));
       const dayStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";
       cells.push(`<div class="annual-day ${weekend?"weekend":""} ${cls} ${today}" title="${esc(tip)}"${dayStyle}><span>${day}</span>${code?`<span class="annual-mark">${esc(code)}</span>`:""}</div>`);
     }
@@ -1411,17 +1576,12 @@ function renderPlanning(){
   const count=$("planningCount");if(count)count.textContent=`${resources.length} ressource${resources.length>1?"s":""} affichée${resources.length>1?"s":""}`;
   const forecastCount=$("planningForecastCount");if(forecastCount){const total=periodForecastCount(resourceIds,dates);forecastCount.classList.toggle("hidden",total===null);if(total!==null){forecastCount.textContent=`Absences prévisionnelles : ${total} jour${total>1?"s":""}`;forecastCount.title=`Sur la période affichée : ${frenchDateShort(start)} – ${frenchDateShort(end)}`;}}
   const presenceRate=$("planningPresenceRate");if(presenceRate){const stats=periodConfirmedStats(resourceIds,dates);presenceRate.textContent=stats.rate===null?"Taux de présence : —":`Taux de présence : ${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;presenceRate.title=`${stats.worked} jour(s) travaillé(s) / ${stats.total} jour(s) classé(s) sur la période affichée selon ${T.presenceMap}`;}
-  const annualYear=Number(start.slice(0,4)),annualStats=annualConfirmedStats(resourceIds,annualYear);
-  const annualLabel=$("planningAnnualLabel");if(annualLabel){annualLabel.textContent=`Année ${annualYear}`;annualLabel.title=`Indicateurs calculés du 1er janvier au 31 décembre ${annualYear} sur les ressources filtrées`;}
-  const annualWorked=$("planningAnnualWorked");if(annualWorked){annualWorked.textContent=`Présence : ${annualStats.worked} jour${annualStats.worked>1?"s":""}`;annualWorked.title=`Jours classés JOUR_TRAVAILLE sur l’année ${annualYear}, hors week-ends et jours fériés`;}
-  const annualAbsence=$("planningAnnualAbsence");if(annualAbsence){annualAbsence.textContent=`Absences : ${annualStats.absence} jour${annualStats.absence>1?"s":""}`;annualAbsence.title=`Jours classés ABSENCE sur l’année ${annualYear}, hors week-ends et jours fériés`;}
-  const annualRate=$("planningAnnualPresenceRate");if(annualRate){annualRate.textContent=annualStats.rate===null?"Taux annuel : —":`Taux annuel : ${annualStats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;annualRate.title=`${annualStats.worked} jour(s) travaillé(s) / ${annualStats.total} jour(s) classé(s) sur toute l’année ${annualYear}`;}
-  renderPlanningAnnualByResource(resources,annualYear);
+  renderPlanningAnnualConsultation(active,teamSet,canSeeAllTeams,ownTeam);
   applyPlanningKpiVisibility();
   const head=$("planningHead");if(head)head.innerHTML='<th class="sticky-col resource-col">Ressource</th><th class="sticky-col team-col">Équipe</th>'+dates.map(d=>{const h=frenchDayHeader(d);return `<th class="planning-day ${h.weekend?"weekend":""}"><span>${h.dow}</span><strong>${h.day}</strong></th>`}).join("");
   const body=$("planningBody");if(body)body.innerHTML=resources.length?resources.map(r=>{
     const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,teamName=norm(F(r,"Equipe_Code","Equipe"))||"—",initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase(),canSeeDetails=canSeePlanningMotifDetails(id);
-    const cells=dates.map(d=>{const row=byResource.get(id)?.get(d),h=frenchDayHeader(d),display=planningDisplayForRow(row),forecastRequests=forecastByResource.get(id)?.get(d)||[],showWorked=$("planningShowWorked")?.checked!==false,showAbsence=$("planningShowAbsence")?.checked!==false,showForecast=$("planningShowForecast")?.checked!==false;let code="",usingForecast=false;if(forecastRequests.length&&showForecast){code="AP";usingForecast=true;}else if(display.code==="P"&&showWorked)code="P";else if(display.code==="A"&&showAbsence)code="A";let title="Aucune donnée synchronisée";if(usingForecast){if(canSeeDetails){const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");title=`Absence prévisionnelle · ${details}`;}else title="Absence prévisionnelle";}else if(row){if(canSeeDetails){const motifCode=norm(F(row,"Motif_Code")),motifLabel=planningOriginalMotifLabel(row),original=[motifLabel,motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);title=original.join(" · ")||"Donnée synchronisée";}else title=code?display.reason:"Aucune information de présence affichable";}let motifColor="";if(canSeeDetails&&code){if(usingForecast){const motifIds=forecastRequests.map(req=>rid(F(req,"Motif"))).filter(Boolean);if(motifIds.length===1)motifColor=presenceColorForMotif(motifIds[0]);}else if(row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));}const chipStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}"${chipStyle}>${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;}).join("");
+    const cells=dates.map(d=>{const row=byResource.get(id)?.get(d),h=frenchDayHeader(d),display=planningDisplayForRow(row),forecastRequests=forecastByResource.get(id)?.get(d)||[],showWorked=$("planningShowWorked")?.checked!==false,showAbsence=$("planningShowAbsence")?.checked!==false,showForecast=$("planningShowForecast")?.checked!==false;let code="",usingForecast=false;if(forecastRequests.length&&showForecast){code="AP";usingForecast=true;}else if(display.code==="P"&&showWorked)code="P";else if(display.code==="A"&&showAbsence)code="A";let title="Aucune donnée synchronisée";if(usingForecast){if(canSeeDetails){const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");title=`Absence prévisionnelle · ${details}`;}else title="Absence prévisionnelle";}else if(row){if(canSeeDetails){const motifCode=norm(F(row,"Motif_Code")),motifLabel=planningOriginalMotifLabel(row),original=[motifLabel,motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);title=original.join(" · ")||"Donnée synchronisée";}else title=code?display.reason:"Aucune information de présence affichable";}let motifColor="";if(canSeeDetails&&code&&!usingForecast&&row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));const chipStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}"${chipStyle}>${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;}).join("");
     const isConnectedUser=id===Number(S.person?.id||0);
     return `<tr class="${isConnectedUser?"planning-self-row":""}"${isConnectedUser?' aria-current="true"':''}><td class="sticky-col resource-col"><div class="resource-name"><span class="resource-avatar">${esc(initials||"R")}</span><strong>${esc(name)}</strong>${isConnectedUser?'<span class="planning-self-badge" title="Votre ligne">Moi</span>':''}<button type="button" class="resource-calendar-btn" data-annual-resource="${id}" title="Voir le calendrier annuel de ${esc(name)}" aria-label="Voir le calendrier annuel de ${esc(name)}">▦</button></div></td><td class="sticky-col team-col" title="${esc(teamName)}">${esc(teamName)}</td>${cells}</tr>`;
   }).join(""):`<tr><td colspan="${dates.length+2}" class="planning-empty">Aucune présence synchronisée sur cette période.</td></tr>`;
@@ -1455,10 +1615,10 @@ async function ensurePresenceMapTable(){
 }
 async function loadPresenceMappings(){
   if(!(await presenceMapTableExists())){
-    S.presenceMappings=[];S.presenceMapReady=false;return false;
+    S.presenceMappings=[];S.presenceMapReady=false;applyPresenceTheme();return false;
   }
   S.presenceMappings=rows(await grist.docApi.fetchTable(T.presenceMap));
-  S.presenceMapReady=true;return true;
+  S.presenceMapReady=true;applyPresenceTheme();return true;
 }
 function presenceTypeLabel(v){
   return ({JOUR_TRAVAILLE:"Jour travaillé",ABSENCE:"Absence",AUCUN_IMPACT:"Aucun impact"})[norm(v).toUpperCase()]||"Non configuré";
@@ -1474,6 +1634,38 @@ function contrastColor(hex){
   const x=validHexColor(hex);if(!x)return "#263a57";
   const r=parseInt(x.slice(1,3),16),g=parseInt(x.slice(3,5),16),b=parseInt(x.slice(5,7),16);
   return (r*299+g*587+b*114)/1000>150?"#263a57":"#ffffff";
+}
+function rgbaFromHex(hex,alpha){
+  const x=validHexColor(hex);if(!x)return "";
+  const r=parseInt(x.slice(1,3),16),g=parseInt(x.slice(3,5),16),b=parseInt(x.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function darkenHex(hex,factor=.35){
+  const x=validHexColor(hex);if(!x)return "#263a57";
+  const clamp=v=>Math.max(0,Math.min(255,Math.round(v)));
+  const r=clamp(parseInt(x.slice(1,3),16)*(1-factor)),g=clamp(parseInt(x.slice(3,5),16)*(1-factor)),b=clamp(parseInt(x.slice(5,7),16)*(1-factor));
+  return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`;
+}
+function presenceColorForType(type){
+  const wanted=norm(type).toUpperCase();
+  const found=(S.presenceMappings||[]).find(r=>norm(F(r,"Type_Presence")).toUpperCase()===wanted&&F(r,"Actif")!==false&&validHexColor(F(r,"Couleur")));
+  return validHexColor(found?F(found,"Couleur"):"")||defaultPresenceColor(wanted);
+}
+function applyPresenceTheme(){
+  const root=document.documentElement;if(!root)return;
+  const worked=presenceColorForType("JOUR_TRAVAILLE");
+  const absence=presenceColorForType("ABSENCE");
+  const setVars=(prefix,color)=>{
+    const solid=validHexColor(color)||"#cbd5e1";
+    root.style.setProperty(`--${prefix}-bg`,rgbaFromHex(solid,.14)||solid);
+    root.style.setProperty(`--${prefix}-border`,rgbaFromHex(solid,.34)||solid);
+    root.style.setProperty(`--${prefix}-text`,darkenHex(solid,.32));
+    root.style.setProperty(`--${prefix}-solid-bg`,solid);
+    root.style.setProperty(`--${prefix}-solid-border`,solid);
+    root.style.setProperty(`--${prefix}-solid-text`,contrastColor(solid));
+  };
+  setVars("presence-worked",worked);
+  setVars("presence-absence",absence);
 }
 function presenceMappingForMotif(motifId){
   return (S.presenceMappings||[]).find(x=>rid(F(x,"Motif"))===Number(motifId)&&F(x,"Actif")!==false)||null;
@@ -1779,6 +1971,9 @@ async function boot(){
   if($("initMenuOrderBtn")) $("initMenuOrderBtn").onclick=()=>initMenuOrderTable().catch(fatal);
   if($("initPlanningParamsBtn")) $("initPlanningParamsBtn").onclick=()=>initPlanningParamsTable().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
   if($("savePlanningParamsBtn")) $("savePlanningParamsBtn").onclick=()=>savePlanningParams().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
+  if($("planningForecastColor")) $("planningForecastColor").oninput=e=>syncPlanningForecastColorUi(e.target.value);
+  if($("planningForecastColorHex")){ $("planningForecastColorHex").oninput=e=>{const raw=norm(e.target.value).toUpperCase();e.target.value=raw;if(validHexColor(raw))syncPlanningForecastColorUi(raw);}; $("planningForecastColorHex").onblur=e=>{if(!syncPlanningForecastColorUi(e.target.value))syncPlanningForecastColorUi(forecastColor());}; }
+  if($("planningForecastColorDefault")) $("planningForecastColorDefault").onclick=()=>syncPlanningForecastColorUi("#FFD54F");
   if($("initPlanningKpiBtn")) $("initPlanningKpiBtn").onclick=()=>ensurePlanningKpiTable().then(loadPlanningKpiRules).catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
   if($("savePlanningKpiRolesBtn")) $("savePlanningKpiRolesBtn").onclick=()=>savePlanningKpiRoleRules().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
   if($("addPlanningKpiOverrideBtn")) $("addPlanningKpiOverrideBtn").onclick=()=>addPlanningKpiOverride().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
@@ -1789,6 +1984,7 @@ async function boot(){
   if($("refreshSyncRequestsBtn")) $("refreshSyncRequestsBtn").onclick=()=>loadSyncRequests().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger"));
   if($("syncCurrentYearBtn")) $("syncCurrentYearBtn").onclick=()=>setSyncCurrentYear();
   if($("createSyncRequestBtn")) $("createSyncRequestBtn").onclick=()=>createSyncRequest().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger"));
+  document.querySelectorAll(".guide-tab").forEach(btn=>btn.onclick=()=>selectGuide(btn.dataset.guide));
   $("save").onclick=()=>save().catch(fatal);
   $("newBtn").onclick=()=>{reset();showView("new")};
   $("cancelEdit").onclick=()=>{reset();showView("mine")};
@@ -1798,6 +1994,8 @@ async function boot(){
   if($("initPlanningBtn")) $("initPlanningBtn").onclick=()=>initPlanningTable().catch(showPlanningError);
   if($("planningSearch")) $("planningSearch").oninput=()=>renderPlanning();
   if($("planningTeam")) $("planningTeam").onchange=()=>renderPlanning();
+  if($("planningAnnualTeam")) $("planningAnnualTeam").onchange=e=>{S.planningAnnualTeam=norm(e.target.value);renderPlanning();};
+  if($("planningAnnualYear")) $("planningAnnualYear").onchange=e=>{S.planningAnnualYear=Number(e.target.value)||Number(localIsoToday().slice(0,4));renderPlanning();};
   if($("planningShowWorked")) $("planningShowWorked").onchange=()=>renderPlanning();
   if($("planningShowAbsence")) $("planningShowAbsence").onchange=()=>renderPlanning();
   if($("planningShowForecast")) $("planningShowForecast").onchange=()=>renderPlanning();
@@ -1812,6 +2010,9 @@ async function boot(){
   if($("planningAnnualByResourceBtn")) $("planningAnnualByResourceBtn").onclick=openPlanningAnnualByResource;
   if($("closePlanningAnnualByResource")) $("closePlanningAnnualByResource").onclick=closePlanningAnnualByResource;
   if($("planningAnnualByResourceModal")) $("planningAnnualByResourceModal").onclick=e=>{if(e.target===$("planningAnnualByResourceModal"))closePlanningAnnualByResource();};
+  if($("planningAnnualTeamAvailabilityBtn")) $("planningAnnualTeamAvailabilityBtn").onclick=openPlanningAnnualTeamAvailability;
+  if($("closePlanningAnnualTeamAvailability")) $("closePlanningAnnualTeamAvailability").onclick=closePlanningAnnualTeamAvailability;
+  if($("planningAnnualTeamAvailabilityModal")) $("planningAnnualTeamAvailabilityModal").onclick=e=>{if(e.target===$("planningAnnualTeamAvailabilityModal"))closePlanningAnnualTeamAvailability();};
   if($("planningBody")) $("planningBody").addEventListener("click",e=>{
     const btn=e.target.closest?.("[data-annual-resource]");
     if(!btn||!$("planningBody").contains(btn))return;
@@ -1901,7 +2102,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","planning","all"],
-    admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","syncParams","syncRequests","planningParams","sync"]
+    admin: ["guides","resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","syncParams","syncRequests","planningParams","sync"]
   };
 
   const applyAccordion = (open) => {
@@ -1910,7 +2111,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const visible = group === open;
       views.forEach(view => {
         sidebar.querySelectorAll(`[data-view="${view}"]`).forEach(el => {
-          el.style.setProperty("display", visible ? "flex" : "none", "important");
+          const allowed=!el.classList.contains("hidden");
+          el.style.setProperty("display", visible && allowed ? "flex" : "none", "important");
         });
       });
     });
