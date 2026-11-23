@@ -934,3 +934,7 @@ main > header.app-header .header-identity{
 @media(max-width:820px){.planning-annual-controls{grid-template-columns:1fr}.planning-block-head{margin-bottom:12px}}
 
 .planning-forecast-color-row{margin:0 22px 22px;padding:16px 0 0;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:18px}.planning-forecast-color-row h4{margin:0 0 4px;color:#263a57}.planning-forecast-color-row p{margin:0;color:var(--muted);font-size:11px}.planning-forecast-color-row .presence-color-control{min-width:280px}@media(max-width:700px){.planning-forecast-color-row{align-items:flex-start;flex-direction:column}.planning-forecast-color-row .presence-color-control{min-width:0;width:100%}}
+
+/* V1.88 — rubrique Documentation autonome */
+.documentation-title{margin-top:26px}
+.sidebar[data-open-section="docs"] .guide-nav{display:flex}

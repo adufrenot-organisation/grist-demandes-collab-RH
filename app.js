@@ -1,4 +1,4 @@
-const VERSION="V1.84";
+const VERSION="V1.88";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -270,10 +270,10 @@ function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Co
 const LABEL_DEFS=[
  ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.planning","Menu","Planning présence"],["nav.all","Menu","Autres demandes"],
  ["nav.guides","Menu","Guides"],["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.planningParams","Menu","Paramètres planning"],["nav.motifs","Menu","Motifs RH"],["nav.presenceMap","Menu","Correspondance présence"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
- ["section.space","Menu","MON ESPACE"],["section.admin","Menu","ADMINISTRATION"],
+ ["section.space","Menu","MON ESPACE"],["section.documentation","Menu","DOCUMENTATION"],["section.admin","Menu","ADMINISTRATION"],
  ["brand.title","En-tête","Demandes RH"],["brand.subtitle","En-tête","Portail collaborateur"],["header.eyebrow","En-tête","ESPACE RH"],
  ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.planning","Pages","Planning présence"],["page.all","Pages","Autres demandes"],
- ["page.guides","Pages","Guides"],["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.planningParams","Pages","Paramètres planning"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
+ ["page.guides","Pages","Documentation"],["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.planningParams","Pages","Paramètres planning"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
  ["home.pill","Accueil","Portail collaborateur"],["home.hero","Accueil","Gérez vos demandes simplement."],
  ["mine.pill","Mes demandes","SUIVI"],["mine.title","Mes demandes","Mes demandes"],["mine.subtitle","Mes demandes","Historique et état de traitement."],
  ["all.pill","Autres demandes","ADMIN"],["all.title","Autres demandes","Autres demandes"],
@@ -327,8 +327,9 @@ function applyLabels(root=document){
   const heads=[...document.querySelectorAll(".nav-title[data-accordion]")];
   heads.forEach(el=>{
     const chevron=el.querySelector(".acc-chevron");
-    const key=el.dataset.accordion==="space"?"section.space":"section.admin";
-    const base=el.dataset.accordion==="space"?"MON ESPACE":"ADMINISTRATION";
+    const section=el.dataset.accordion;
+    const key=section==="space"?"section.space":section==="docs"?"section.documentation":"section.admin";
+    const base=section==="space"?"MON ESPACE":section==="docs"?"DOCUMENTATION":"ADMINISTRATION";
     [...el.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE).forEach(n=>n.nodeValue="");
     el.insertBefore(document.createTextNode(L(key,base)+" "),chevron||null);
   });
@@ -345,7 +346,6 @@ const MENU_ORDER_DEFS={
     ["all","Autres demandes"]
   ],
   admin:[
-    ["guides","Guides"],
     ["resources","Ressources"],
     ["managers","Managers & Ressources"],
     ["motifs","Motifs RH"],
@@ -979,8 +979,9 @@ function guideAllowed(key){
   return false;
 }
 function applyNavigationPermissions(){
-  // Administration reste visible car le Guide utilisateur est accessible à tous.
-  $("adminNav")?.classList.remove("hidden");
+  // Documentation est visible pour tous. Administration reste réservée aux profils administratifs.
+  $("documentationNav")?.classList.remove("hidden");
+  $("adminNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
   document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!S.isOwner));
   document.querySelectorAll(".manager-admin-only").forEach(el=>el.classList.toggle("hidden",!(S.isAdmin||S.isOwner)));
   document.querySelectorAll(".admin-config-only").forEach(el=>el.classList.toggle("hidden",!(S.isAdmin||S.isOwner)));
@@ -1011,7 +1012,7 @@ function showView(name){
   document.querySelectorAll(".nav").forEach(v=>v.classList.remove("active"));
   document.getElementById(`view-${name}`)?.classList.add("active");
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
-  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],guides:["page.guides","Guides"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"],planningParams:["page.planningParams","Paramètres planning"]};
+  const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],guides:["page.guides","Documentation"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"],planningParams:["page.planningParams","Paramètres planning"]};
   if(name==="presenceMap")setTimeout(()=>renderPresenceMapAdmin().catch(showPresenceMapError),0);
   if(name==="planning")setTimeout(()=>loadPlanning().catch(showPlanningError),0);
   if(name==="syncParams")setTimeout(()=>loadSyncParams().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger")),0);
@@ -2102,7 +2103,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const groups = {
     space: ["home","new","mine","planning","all"],
-    admin: ["guides","resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","syncParams","syncRequests","planningParams","sync"]
+    docs: ["guides"],
+    admin: ["resources","managers","motifs","presenceMap","acl","labels","debug","menuOrder","syncParams","syncRequests","planningParams","sync"]
   };
 
   const applyAccordion = (open) => {

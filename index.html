@@ -1,22 +1,25 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.84</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V1.88</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.84</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
+<div class="version version-brand">V1.88</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
   <button class="accordion-item accordion-space nav" data-view="mine">▤ <span>Mes demandes</span></button>
   <button class="accordion-item accordion-space nav" data-view="planning">▦ <span>Planning présence</span></button>
   <button id="allRequestsNav" class="accordion-item accordion-space nav hidden" data-view="all">▦ <span>Autres demandes</span></button>
+  <div id="documentationNav">
+    <div class="nav-title documentation-title" data-accordion="docs" data-label-key="section.documentation">DOCUMENTATION <span class="acc-chevron">⌄</span></div>
+    <button class="accordion-item accordion-docs nav guide-nav" data-view="guides">? <span data-label-key="nav.guides">Guides</span></button>
+  </div>
   <div id="adminNav" class="hidden">
     <div class="nav-title admin-title" data-accordion="admin">ADMINISTRATION <span class="acc-chevron">⌄</span></div>
-    <button class="accordion-item accordion-admin nav guide-nav" data-view="guides">? <span>Guides</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="resources">♙ <span>Ressources</span></button>
     <button class="accordion-item accordion-admin nav manager-admin-only" data-view="managers">♧ <span>Managers & Ressources</span></button>
     <button class="accordion-item accordion-admin nav owner-only" data-view="motifs">◇ <span>Motifs RH</span></button>
@@ -110,7 +113,7 @@
 <div id="annualPresenceModal" class="modal hidden"><div class="modalbox annual-presence-modal"><div class="modalhead"><div><span class="pill">PRÉSENCE ANNUELLE</span><h3 id="annualPresenceTitle">Calendrier de présence</h3><p id="annualPresenceSubtitle" class="modal-subtitle"></p></div><button id="closeAnnualPresence" class="iconbtn" type="button" aria-label="Fermer">×</button></div><div class="annual-presence-toolbar"><label>Année<select id="annualPresenceYear"></select></label><div class="annual-presence-kpis"><span id="annualPresenceRateKpi" class="annual-kpi rate">Taux de présence —</span><span id="annualAbsenceKpi" class="annual-kpi absence">0 jour d’absence</span></div></div><div class="annual-presence-legend"><span><b class="presence-chip status-p">P</b> Jour travaillé</span><span><b class="presence-chip status-a">A</b> Absence</span><span><b class="presence-chip status-ap">AP</b> Absence prévisionnelle</span></div><div id="annualPresenceCalendar" class="annual-calendar"></div></div></div>
 
 <section id="view-guides" class="view adminview guide-view">
- <div class="pagehead"><div><span class="pill adminpill">DOCUMENTATION</span><h2>Guides</h2><p>Consultez la documentation disponible pour votre profil.</p></div></div>
+ <div class="pagehead"><div><span class="pill adminpill">DOCUMENTATION</span><h2 data-label-key="page.guides">Documentation</h2><p>Consultez les guides disponibles pour votre profil.</p></div></div>
  <div class="card guide-card">
   <div class="guide-toolbar">
    <div class="guide-tabs" role="tablist" aria-label="Guides disponibles">
