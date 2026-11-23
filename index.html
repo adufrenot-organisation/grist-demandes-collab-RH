@@ -1,19 +1,21 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V1.90</title><link rel="stylesheet" href="styles.css">
-<script src="https://docs.getgrist.com/grist-plugin-api.js"></script></head>
+<title>Demandes RH · V1.94</title><link rel="stylesheet" href="styles.css">
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js"></script></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V1.90</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
+<div class="version version-brand">V1.94</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
-  <button class="accordion-item accordion-space nav" data-view="new">＋ <span>Nouvelle demande</span></button>
-  <button class="accordion-item accordion-space nav" data-view="mine">▤ <span>Mes demandes</span></button>
+  <button class="accordion-item accordion-space nav" data-request-menu="true" data-view="new">＋ <span>Nouvelle demande</span></button>
+  <button class="accordion-item accordion-space nav" data-request-menu="true" data-view="mine">▤ <span>Mes demandes</span></button>
   <button class="accordion-item accordion-space nav" data-view="planning">▦ <span>Planning présence</span></button>
-  <button id="allRequestsNav" class="accordion-item accordion-space nav hidden" data-view="all">▦ <span>Autres demandes</span></button>
+  <button id="importCongesNav" class="accordion-item accordion-space nav hidden" data-view="importConges">⌁ <span>Import congés</span></button>
+  <button id="allRequestsNav" class="accordion-item accordion-space nav hidden" data-request-menu="true" data-view="all">▦ <span>Autres demandes</span></button>
   <div id="documentationNav">
     <div class="nav-title documentation-title" data-accordion="docs" data-label-key="section.documentation">DOCUMENTATION <span class="acc-chevron">⌄</span></div>
     <button id="guideUserNav" class="accordion-item accordion-docs nav guide-nav" data-view="guideUser">👤 <span>Guide utilisateur</span></button>
@@ -33,6 +35,7 @@
     <button class="accordion-item accordion-admin nav admin-config-only" data-view="syncParams">⚙ <span>Paramètres de synchro</span></button>
     <button class="accordion-item accordion-admin nav admin-config-only" data-view="syncRequests">↻ <span>Demandes de synchro</span></button>
     <button class="accordion-item accordion-admin nav admin-config-only" data-view="planningParams">▦ <span>Paramètres planning</span></button>
+    <button class="accordion-item accordion-admin nav admin-config-only" data-view="importConfig">⌁ <span>Paramètres import congés</span></button>
     
   </div>
   <div class="syncmini" id="syncMini">
@@ -68,6 +71,15 @@
  <div class="card"><div class="tablewrap"><table><thead><tr><th>Référence</th><th>Type</th><th>Date début</th><th>Date fin</th><th>Motif</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 </section>
 
+<section id="view-importConges" class="view">
+ <div class="pagehead"><div><span class="pill">IMPORT</span><h2 data-label-key="page.importConges">Import congés</h2><p>Analysez une carte annuelle de congés, vérifiez les périodes détectées puis créez les demandes à synchroniser vers le module manager.</p></div></div>
+ <div id="importCongesMsg" class="alert hidden"></div>
+ <div class="card formcard import-conges-upload"><div class="formgrid">
+  <label>Ressource<select id="importResource"></select></label><label>Année<input id="importYear" type="number" min="2000" max="2100"></label>
+  <label class="wide">Image du planning<input id="importImage" type="file" accept="image/png,image/jpeg,image/webp"></label>
+ </div><div class="import-config-status"><span id="importConfigStatus">Chargement du paramétrage…</span><small>OCR classique exécuté dans le navigateur. Aucune IA générative.</small></div><div class="actions"><button id="importAnalyzeBtn" class="primary" type="button">Analyser l’image</button></div></div>
+ <div class="card"><div class="section-head"><div><h3>Brouillons détectés</h3><p>Décochez les périodes à ne pas transformer en demandes. Les faibles confiances sont mises en évidence.</p></div><button id="importCreateRequestsBtn" class="primary" type="button" disabled>Valider et créer les demandes</button></div><div class="tablewrap"><table><thead><tr><th>Créer</th><th>Code</th><th>Motif RH</th><th>Début</th><th>Fin</th><th>Confiance</th></tr></thead><tbody id="importDraftRows"><tr><td colspan="6">Aucun brouillon.</td></tr></tbody></table></div></div>
+</section>
 <section id="view-planning" class="view">
  <div class="pagehead planning-pagehead"><div><span class="pill">PLANNING</span><h2>Planning présence</h2><p>Vue en lecture seule, synchronisée depuis Cockpit RH et restituée selon le paramétrage des motifs.</p></div><div class="planning-sync-badge">● <span id="planningSync">En attente de synchronisation</span></div></div>
  <div id="planningMsg" class="alert hidden"></div>
@@ -93,7 +105,7 @@
     <div class="planning-range-nav"><button id="planningPrev" class="iconbtn" title="Période précédente">‹</button><strong id="planningRange"></strong><button id="planningNext" class="iconbtn" title="Période suivante">›</button></div>
    </div>
   </div>
-  <div class="card planning-card"><div class="planning-toolbar"><div class="planning-metric-stack"><div class="planning-metrics"><span id="planningCount" class="planning-count">0 ressource affichée</span><span id="planningForecastCount" class="planning-forecast-count hidden"></span><span id="planningPresenceRate" class="planning-presence-rate">Taux de présence —</span></div></div><div class="planning-display-filters" aria-label="Filtres d’affichage du planning"><label><input id="planningShowWorked" type="checkbox" checked><span><b class="presence-chip status-p">P</b> Jours travaillés</span></label><label><input id="planningShowAbsence" type="checkbox" checked><span><b class="presence-chip status-a">A</b> Absences</span></label><label><input id="planningShowForecast" type="checkbox" checked><span><b class="presence-chip status-ap">AP</b> Absences prévisionnelles</span></label></div><div class="planning-actions"><span class="readonly-badge">🔒 Lecture seule</span><button id="planningRefresh" class="iconbtn" title="Actualiser le planning">↻</button></div></div><div class="planning-tablewrap"><table class="planning-table"><thead><tr id="planningHead"></tr></thead><tbody id="planningBody"></tbody></table></div></div>
+  <div class="card planning-card"><div class="planning-toolbar"><div class="planning-metric-stack"><div class="planning-metrics"><span id="planningCount" class="planning-count">0 ressource affichée</span><span id="planningForecastCount" class="planning-forecast-count hidden"></span><span id="planningPresenceRate" class="planning-presence-rate">Taux de présence —</span></div></div><div class="planning-display-filters" aria-label="Filtres d’affichage du planning"><label><input id="planningShowWorked" type="checkbox" checked><span><b class="presence-chip status-p">P</b> Jours travaillés</span></label><label><input id="planningShowAbsence" type="checkbox" checked><span><b class="presence-chip status-a">A</b> Absences</span></label><label><input id="planningShowForecast" type="checkbox" checked><span><b class="presence-chip status-ap">AP</b> Absences prévisionnelles</span></label></div><div class="planning-actions"><span class="readonly-badge">🔒 Lecture seule</span><button id="planningRefresh" class="iconbtn" title="Actualiser le planning">↻</button></div></div><div id="planningRequestBar" class="planning-request-bar hidden"><div><strong id="planningRequestLabel">Période sélectionnée</strong><span>Cliquez sur votre ligne ; Shift+clic pour étendre la période.</span></div><div class="planning-request-actions"><button id="planningClearRequest" type="button" class="secondary">Effacer</button><button id="planningCreateRequest" type="button" class="primary">Créer une demande</button></div></div><div class="planning-tablewrap"><table class="planning-table"><thead><tr id="planningHead"></tr></thead><tbody id="planningBody"></tbody></table></div></div>
  </div>
 </section>
 
@@ -209,6 +221,13 @@
  </div>
 </section>
 
+<section id="view-importConfig" class="view adminview">
+ <div class="pagehead"><div><span class="pill adminpill">IMPORT</span><h2 data-label-key="page.importConfig">Paramètres import congés</h2><p>Associez les codes présents sur les images aux motifs RH utilisés pour créer les demandes automatiques.</p></div></div>
+ <div id="importConfigMsg" class="alert hidden"></div>
+ <div class="card"><div class="section-head"><div><h3>Tables du module d’import</h3><p id="importConfigSetupText">Vérification…</p></div><button id="initImportTablesBtn" class="primary" type="button">Initialiser / compléter</button></div></div>
+ <div id="importConfigManager" class="card hidden"><div class="section-head"><div><h3>Correspondance OCR → Demande RH</h3><p>Exemple : CA → Congé annuel. La confiance minimale détermine si la période est cochée automatiquement après analyse.</p></div><button id="addImportConfigRowBtn" class="secondary" type="button">＋ Ajouter un code</button></div><div class="tablewrap"><table><thead><tr><th>Code OCR</th><th>Motif RH</th><th>Type</th><th>Confiance min.</th><th>Actif</th><th>Commentaire</th><th></th></tr></thead><tbody id="importConfigRows"></tbody></table></div></div>
+ <div class="card"><div class="admin-content"><strong>Tables utilisées</strong><p><code>PARAM_IMPORT_CONGES</code> : correspondances OCR. <code>IMPORT_CONGES</code> : historique d’import. <code>IMPORT_CONGES_LIGNES</code> : lignes détectées et demandes créées.</p></div></div>
+</section>
 <section id="view-planningParams" class="view adminview">
  <div class="pagehead"><div><span class="pill adminpill">PLANNING</span><h2>Paramètres planning</h2><p>Choisissez les durées proposées aux utilisateurs et la durée sélectionnée par défaut.</p></div></div>
  <div id="planningParamsMsg" class="alert hidden"></div>
@@ -218,6 +237,7 @@
   <div id="planningWeekChoices" class="planning-week-choices"></div>
   <div class="planning-default-row"><label>Durée par défaut<select id="planningDefaultWeeks"></select></label><button id="savePlanningParamsBtn" class="primary" type="button">Enregistrer</button></div>
   <div class="planning-forecast-color-row"><div><h4>Couleur des absences prévisionnelles</h4><p>Cette couleur est utilisée pour toutes les pastilles et vues <strong>AP</strong>.</p></div><div class="presence-color-control"><label class="presence-color-picker" title="Choisir la couleur AP"><span id="planningForecastColorPreview" class="presence-color-preview" style="background:#FFD54F"></span><input id="planningForecastColor" type="color" value="#FFD54F" aria-label="Couleur des absences prévisionnelles"></label><input id="planningForecastColorHex" class="presence-color-hex" value="#FFD54F" maxlength="7" spellcheck="false" aria-label="Code hexadécimal de la couleur AP"><button id="planningForecastColorDefault" type="button" class="table-action small">Défaut</button></div></div>
+  <div class="planning-access-rule-row"><div><h4>Accès aux demandes pour les ressources internes</h4><p>Lorsque cette option est active, les ressources <strong>Interne</strong> ne voient pas les menus de demandes, sauf si elles sont Manager ou PMO.</p></div><label class="planning-access-switch"><input id="planningHideInternalRequests" type="checkbox" checked><span>Masquer les menus de demandes aux internes</span></label></div>
  </div>
  <div class="card planning-kpi-admin">
   <div class="section-head"><div><h3>Visibilité des indicateurs</h3><p>Définissez les indicateurs visibles selon le rôle connecté. Une dérogation par ressource est prioritaire.</p><p id="planningKpiSetupText">Vérification…</p></div><button id="initPlanningKpiBtn" class="secondary" type="button">Initialiser / compléter</button></div>

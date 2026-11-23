@@ -1,6 +1,6 @@
-const VERSION="V1.90";
-const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS"};
-const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null};
+const VERSION="V1.94";
+const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS",importConfig:"PARAM_IMPORT_CONGES",importRuns:"IMPORT_CONGES",importLines:"IMPORT_CONGES_LIGNES"};
+const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null,planningRequestStart:"",planningRequestEnd:"",importConfigRows:[],importDrafts:[],importOcrWords:[],importFileName:"",importDetectedCount:0};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
 const DEBUG_KEY="rh_debug_enabled";
 function debugIsEnabled(){
@@ -259,7 +259,7 @@ async function load(){
   // Sécurité : q ne contient que ce que les ACL Grist autorisent réellement.
   // ADMIN voit tout q ; tous les autres profils restent limités à leurs propres demandes.
   S.requests=S.isAdmin?q:S.myRequests;
-  $("allRequestsNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
+  applyRequestMenuVisibility();
   render();
   applyLabels();
 }
@@ -268,12 +268,12 @@ function motifCode(id){const r=S.motifs.find(x=>x.id===id);return r?norm(F(r,"Co
 
 // V1.29 — libellés administrables localement dans Grist
 const LABEL_DEFS=[
- ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.planning","Menu","Planning présence"],["nav.all","Menu","Autres demandes"],
- ["nav.guides","Menu","Guides"],["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.planningParams","Menu","Paramètres planning"],["nav.motifs","Menu","Motifs RH"],["nav.presenceMap","Menu","Correspondance présence"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
+ ["nav.home","Menu","Accueil"],["nav.new","Menu","Nouvelle demande"],["nav.mine","Menu","Mes demandes"],["nav.planning","Menu","Planning présence"],["nav.importConges","Menu","Import congés"],["nav.all","Menu","Autres demandes"],
+ ["nav.guides","Menu","Guides"],["nav.importConfig","Menu","Paramètres import congés"],["nav.resources","Menu","Ressources"],["nav.debug","Menu","Diagnostic"],["nav.planningParams","Menu","Paramètres planning"],["nav.motifs","Menu","Motifs RH"],["nav.presenceMap","Menu","Correspondance présence"],["nav.acl","Menu","ACL & Permissions"],["nav.labels","Menu","Libellés de l’application"],
  ["section.space","Menu","MON ESPACE"],["section.documentation","Menu","DOCUMENTATION"],["section.admin","Menu","ADMINISTRATION"],
  ["brand.title","En-tête","Demandes RH"],["brand.subtitle","En-tête","Portail collaborateur"],["header.eyebrow","En-tête","ESPACE RH"],
  ["page.home","Pages","Bonjour"],["page.new","Pages","Nouvelle demande"],["page.mine","Pages","Mes demandes"],["page.planning","Pages","Planning présence"],["page.all","Pages","Autres demandes"],
- ["page.guides","Pages","Documentation"],["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.planningParams","Pages","Paramètres planning"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
+ ["page.guides","Pages","Documentation"],["page.importConges","Pages","Import congés"],["page.importConfig","Pages","Paramètres import congés"],["page.resources","Pages","Ressources"],["page.debug","Pages","Diagnostic"],["page.planningParams","Pages","Paramètres planning"],["page.motifs","Pages","Motifs RH"],["page.presenceMap","Pages","Correspondance présence"],["page.acl","Pages","ACL & Permissions"],["page.sync","Pages","Synchronisation"],["page.labels","Pages","Libellés de l’application"],
  ["home.pill","Accueil","Portail collaborateur"],["home.hero","Accueil","Gérez vos demandes simplement."],
  ["mine.pill","Mes demandes","SUIVI"],["mine.title","Mes demandes","Mes demandes"],["mine.subtitle","Mes demandes","Historique et état de traitement."],
  ["all.pill","Autres demandes","ADMIN"],["all.title","Autres demandes","Autres demandes"],
@@ -320,7 +320,7 @@ function applyLabels(root=document){
       const v=el.getAttribute(a); if(v&&replacements.has(v))el.setAttribute(a,replacements.get(v));
     });
   });
-  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",guideUser:"nav.guides",guideManager:"nav.guides",guideAdmin:"nav.guides",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder",syncParams:"nav.syncParams",syncRequests:"nav.syncRequests",planningParams:"nav.planningParams"};
+  const navKeys={home:"nav.home",new:"nav.new",mine:"nav.mine",planning:"nav.planning",all:"nav.all",guideUser:"nav.guides",guideManager:"nav.guides",guideAdmin:"nav.guides",importConges:"nav.importConges",importConfig:"nav.importConfig",resources:"nav.resources",managers:"nav.managers",debug:"nav.debug",motifs:"nav.motifs",presenceMap:"nav.presenceMap",acl:"nav.acl",labels:"nav.labels",menuOrder:"nav.menuOrder",syncParams:"nav.syncParams",syncRequests:"nav.syncRequests",planningParams:"nav.planningParams"};
   Object.entries(navKeys).forEach(([view,key])=>{
     const span=document.querySelector(`.nav[data-view="${view}"] span`); if(span)span.textContent=L(key,span.textContent);
   });
@@ -557,7 +557,8 @@ async function initPlanningParamsTable(){
   const defs=[
     ["PLANNING_SEMAINES_DISPONIBLES","2,3,4","Durées proposées dans le planning, en semaines (1 à 8)"],
     ["PLANNING_SEMAINES_DEFAUT","2","Durée sélectionnée par défaut dans le planning"],
-    ["PLANNING_COULEUR_AP","#FFD54F","Couleur des absences prévisionnelles (AP)"]
+    ["PLANNING_COULEUR_AP","#FFD54F","Couleur des absences prévisionnelles (AP)"],
+    ["MASQUER_DEMANDES_INTERNES","true","Masquer les menus de demandes aux ressources internes, sauf Manager / PMO"]
   ];
   const actions=defs.filter(x=>!keys.has(x[0])).map(x=>["AddRecord",T.planningParams,null,{Cle:x[0],Valeur:x[1],Commentaire:x[2]}]);
   if(actions.length)await grist.docApi.applyUserActions(actions);
@@ -572,6 +573,7 @@ async function loadPlanningParams(){
   $("planningParamsManager")?.classList.toggle("hidden",!exists);
   if(exists&&$("planningParamsManager"))renderPlanningParamsAdmin();
   applyForecastTheme();
+  if(S.person)applyNavigationPermissions();
   if($("planningWeeks"))renderPlanningWeekSelect();
 }
 function renderPlanningParamsAdmin(){
@@ -582,6 +584,8 @@ function renderPlanningParamsAdmin(){
   const ap=validHexColor(planningParamValue("PLANNING_COULEUR_AP","#FFD54F"))||"#ffd54f";
   const picker=$("planningForecastColor"),hex=$("planningForecastColorHex"),preview=$("planningForecastColorPreview");
   if(picker)picker.value=ap;if(hex)hex.value=ap.toUpperCase();if(preview)preview.style.background=ap;
+  const internalToggle=$("planningHideInternalRequests");
+  if(internalToggle)internalToggle.checked=hideRequestsForInternalsEnabled();
 }
 async function savePlanningParams(){
   if(!(S.isAdmin||S.isOwner))return;
@@ -592,11 +596,14 @@ async function savePlanningParams(){
   const tbl=grist.getTable(T.planningParams);
   const byKey=Object.fromEntries((S.planningParams||[]).map(r=>[norm(F(r,"Cle")),r]));
   const apColor=validHexColor($("planningForecastColorHex")?.value)||validHexColor($("planningForecastColor")?.value)||"#ffd54f";
-  for(const [key,value] of [["PLANNING_SEMAINES_DISPONIBLES",selected.join(",")],["PLANNING_SEMAINES_DEFAUT",String(actualDefault)],["PLANNING_COULEUR_AP",apColor.toUpperCase()]]){
+  const hideInternal=$("planningHideInternalRequests")?.checked!==false;
+  const values=[["PLANNING_SEMAINES_DISPONIBLES",selected.join(",")],["PLANNING_SEMAINES_DEFAUT",String(actualDefault)],["PLANNING_COULEUR_AP",apColor.toUpperCase()],["MASQUER_DEMANDES_INTERNES",hideInternal?"true":"false"]];
+  const comments={PLANNING_SEMAINES_DISPONIBLES:"Durées proposées dans le planning, en semaines (1 à 8)",PLANNING_SEMAINES_DEFAUT:"Durée sélectionnée par défaut dans le planning",PLANNING_COULEUR_AP:"Couleur des absences prévisionnelles (AP)",MASQUER_DEMANDES_INTERNES:"Masquer les menus de demandes aux ressources internes, sauf Manager / PMO"};
+  for(const [key,value] of values){
     if(byKey[key])await tbl.update({id:byKey[key].id,fields:{Valeur:value}});
-    else await tbl.create({fields:{Cle:key,Valeur:value,Commentaire:key==="PLANNING_COULEUR_AP"?"Couleur des absences prévisionnelles (AP)":key.endsWith("DEFAUT")?"Durée sélectionnée par défaut dans le planning":"Durées proposées dans le planning, en semaines (1 à 8)"}});
+    else await tbl.create({fields:{Cle:key,Valeur:value,Commentaire:comments[key]||""}});
   }
-  await loadPlanningParams();S.planningWeeks=planningDefaultWeeks();applyForecastTheme();renderPlanning();showSyncAdminMsg("planningParamsMsg","Paramètres du planning enregistrés.");
+  await loadPlanningParams();S.planningWeeks=planningDefaultWeeks();applyForecastTheme();applyNavigationPermissions();renderPlanning();showSyncAdminMsg("planningParamsMsg","Paramètres du planning enregistrés.");
 }
 function renderPlanningWeekSelect(){
   const sel=$("planningWeeks");if(!sel)return;
@@ -967,11 +974,46 @@ function setViewAs(id){
 function managerGuideAllowed(){
   return isPmo()||currentProfile()==="MANAGER"||(S.managedResources||[]).length>0;
 }
+function internalExternalProfile(){
+  return norm(F(S.person||{},"Profil_interne_externe")).toUpperCase();
+}
+function hideRequestsForInternalsEnabled(){
+  const raw=planningParamValue("MASQUER_DEMANDES_INTERNES","true").toLowerCase();
+  return !["false","0","non","no","off","desactive","désactivé","desactivé"].includes(raw);
+}
+function requestMenusAllowed(){
+  // Règle V1.92 : une ressource INTERNE standard peut être privée des menus de demandes,
+  // mais ce comportement est désormais débrayable dans Administration > Paramètres planning.
+  if(!hideRequestsForInternalsEnabled())return true;
+  if(internalExternalProfile()!=="INTERNE")return true;
+  return isPmo()||currentProfile()==="MANAGER"||(S.managedResources||[]).length>0||(S.managerLinks||[]).some(x=>F(x,"Actif")!==false);
+}
+function importCongesAllowed(){
+  return internalExternalProfile()==="INTERNE"||isPmo()||currentProfile()==="MANAGER"||(S.managedResources||[]).length>0||(S.managerLinks||[]).some(x=>F(x,"Actif")!==false);
+}
+function importAccessibleResources(){
+  if(!importCongesAllowed())return [];
+  if(isPmo()||S.isAdmin||S.isOwner)return (S.resources||[]).filter(r=>F(r,"Actif")!==false);
+  if(currentProfile()==="MANAGER"||(S.managedResources||[]).length){
+    const ids=new Set([Number(S.person?.id||0),...(S.managedResources||[]).map(r=>Number(r.id))]);
+    return (S.resources||[]).filter(r=>ids.has(Number(r.id))&&F(r,"Actif")!==false);
+  }
+  return S.person?[S.person]:[];
+}
+function applyRequestMenuVisibility(){
+  const allowed=requestMenusAllowed();
+  document.querySelectorAll('[data-request-menu="true"]').forEach(el=>el.classList.toggle("hidden",!allowed));
+  // Autres demandes conserve en plus sa règle historique ADMIN/OWNER.
+  const allNav=$("allRequestsNav");
+  if(allNav)allNav.classList.toggle("hidden",!(allowed&&(S.isAdmin||S.isOwner)));
+}
 function applyNavigationPermissions(){
+  applyRequestMenuVisibility();
   $("documentationNav")?.classList.remove("hidden");
   $("guideUserNav")?.classList.remove("hidden");
   $("guideManagerNav")?.classList.toggle("hidden",!managerGuideAllowed());
   $("guideAdminNav")?.classList.toggle("hidden",!S.isOwner);
+  $("importCongesNav")?.classList.toggle("hidden",!importCongesAllowed());
   $("adminNav")?.classList.toggle("hidden",!(S.isAdmin||S.isOwner));
   document.querySelectorAll(".owner-only").forEach(el=>el.classList.toggle("hidden",!S.isOwner));
   document.querySelectorAll(".manager-admin-only").forEach(el=>el.classList.toggle("hidden",!(S.isAdmin||S.isOwner)));
@@ -979,6 +1021,11 @@ function applyNavigationPermissions(){
 }
 
 function showView(name){
+  if(name==="importConges"&&!importCongesAllowed())name="home";
+  if(name==="importConfig"&&!(S.isAdmin||S.isOwner))name="home";
+  if(["new","mine","all"].includes(name)&&!requestMenusAllowed()){
+    name="home";
+  }
   if(S.viewAs && name==="new")return;
   if(name==="guideManager"&&!managerGuideAllowed())return;
   if(name==="guideAdmin"&&!S.isOwner)return;
@@ -994,6 +1041,8 @@ function showView(name){
   document.querySelector(`.nav[data-view="${name}"]`)?.classList.add("active");
   const titles={home:["page.home","Bonjour"],new:["page.new","Nouvelle demande"],mine:["page.mine","Mes demandes"],planning:["page.planning","Planning présence"],all:["page.all","Autres demandes"],guideUser:["page.guides","Guide utilisateur"],guideManager:["page.guides","Guide manager"],guideAdmin:["page.guides","Guide administrateur"],resources:["page.resources","Ressources"],motifs:["page.motifs","Motifs RH"],presenceMap:["page.presenceMap","Correspondance présence"],acl:["page.acl","ACL & Permissions"],sync:["page.sync","Synchronisation"],managers:["page.managers","Managers & Ressources"],labels:["page.labels","Libellés de l’application"],menuOrder:["page.menuOrder","Ordre des menus"],syncParams:["page.syncParams","Paramètres de synchro"],syncRequests:["page.syncRequests","Demandes de synchro"],planningParams:["page.planningParams","Paramètres planning"]};
   if(name==="presenceMap")setTimeout(()=>renderPresenceMapAdmin().catch(showPresenceMapError),0);
+  if(name==="importConges")setTimeout(()=>renderImportConges().catch(e=>showImportMsg(e?.message||String(e),"danger")),0);
+  if(name==="importConfig")setTimeout(()=>renderImportConfigAdmin().catch(e=>showImportConfigMsg(e?.message||String(e),"danger")),0);
   if(name==="planning")setTimeout(()=>loadPlanning().catch(showPlanningError),0);
   if(name==="syncParams")setTimeout(()=>loadSyncParams().catch(e=>showSyncAdminMsg("syncParamsMsg",e?.message||String(e),"danger")),0);
   if(name==="syncRequests")setTimeout(()=>loadSyncRequests().catch(e=>showSyncAdminMsg("syncRequestsMsg",e?.message||String(e),"danger")),0);
@@ -1029,6 +1078,107 @@ async function detectOwner(){
 function bindNav(){
   document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>showView(b.dataset.view));
   document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showView(b.dataset.go));
+}
+
+// V1.93 — Import annuel de congés depuis une image (OCR classique, sans IA générative)
+async function importTableExists(name){return gristTableExists(name)}
+async function ensureImportTables(){
+  if(!await importTableExists(T.importConfig))await grist.docApi.applyUserActions([["AddTable",T.importConfig,[
+    {id:"Code_Import",type:"Text",label:"Code import"},{id:"Motif",type:"Ref:"+T.motifs,label:"Motif RH"},{id:"Type_Demande",type:"Text",label:"Type demande"},{id:"Confiance_Min",type:"Int",label:"Confiance minimale"},{id:"Actif",type:"Bool",label:"Actif"},{id:"Commentaire",type:"Text",label:"Commentaire"}
+  ]]]);
+  if(!await importTableExists(T.importRuns))await grist.docApi.applyUserActions([["AddTable",T.importRuns,[
+    {id:"Ressource",type:"Ref:"+T.resources,label:"Ressource"},{id:"Annee",type:"Int",label:"Année"},{id:"Fichier_Nom",type:"Text",label:"Fichier"},{id:"Date_Import",type:"DateTime:UTC",label:"Date import"},{id:"Importe_Par",type:"Text",label:"Importé par"},{id:"Statut",type:"Text",label:"Statut"},{id:"Nb_Codes_Detectes",type:"Int",label:"Codes détectés"},{id:"Nb_Demandes_Creees",type:"Int",label:"Demandes créées"},{id:"Nb_Erreurs",type:"Int",label:"Erreurs"},{id:"Message",type:"Text",label:"Message"}
+  ]]]);
+  if(!await importTableExists(T.importLines))await grist.docApi.applyUserActions([["AddTable",T.importLines,[
+    {id:"Import",type:"Ref:"+T.importRuns,label:"Import"},{id:"Code_Import",type:"Text",label:"Code import"},{id:"Motif",type:"Ref:"+T.motifs,label:"Motif RH"},{id:"Date_Debut",type:"Date",label:"Date début"},{id:"Date_Fin",type:"Date",label:"Date fin"},{id:"Confiance",type:"Numeric",label:"Confiance"},{id:"Statut",type:"Text",label:"Statut"},{id:"Demande_Creee",type:"Ref:"+T.requests,label:"Demande créée"},{id:"Message",type:"Text",label:"Message"}
+  ]]]);
+}
+async function loadImportConfig(){
+  if(!await importTableExists(T.importConfig)){S.importConfigRows=[];return false}
+  S.importConfigRows=rows(await grist.docApi.fetchTable(T.importConfig));return true;
+}
+function showImportMsg(t,kind=""){const e=$("importCongesMsg");if(!e)return;e.textContent=t;e.className=`alert ${kind}`;e.classList.remove("hidden")}
+function showImportConfigMsg(t,kind=""){const e=$("importConfigMsg");if(!e)return;e.textContent=t;e.className=`alert ${kind}`;e.classList.remove("hidden")}
+function importCode(v){return norm(v).toUpperCase().replace(/[^A-Z0-9]/g,"")}
+function importActiveMappings(){return (S.importConfigRows||[]).filter(r=>F(r,"Actif")!==false&&importCode(F(r,"Code_Import"))&&rid(F(r,"Motif")))}
+async function renderImportConfigAdmin(){
+  if(!(S.isAdmin||S.isOwner))return;
+  const exists=await loadImportConfig();
+  $("importConfigSetupText").innerHTML=exists?`<strong>${T.importConfig}</strong> disponible · ${S.importConfigRows.length} code(s).`:`<strong>${T.importConfig}</strong> absente.`;
+  $("importConfigManager").classList.toggle("hidden",!exists);
+  if(!exists)return;
+  const body=$("importConfigRows");
+  const opts='<option value="">— Choisir —</option>'+S.motifs.map(m=>`<option value="${m.id}">${esc(F(m,"Code")||"")} · ${esc(F(m,"Libelle")||"")}</option>`).join("");
+  body.innerHTML=S.importConfigRows.length?S.importConfigRows.map(r=>`<tr><td><input data-ic-code="${r.id}" value="${esc(F(r,"Code_Import")||"")}" maxlength="12"></td><td><select data-ic-motif="${r.id}">${opts}</select></td><td><select data-ic-type="${r.id}"><option value="CONGE">Congé</option><option value="ABSENCE">Absence</option></select></td><td><input data-ic-conf="${r.id}" type="number" min="0" max="100" value="${Number(F(r,"Confiance_Min")||70)}"></td><td><input data-ic-active="${r.id}" type="checkbox" ${F(r,"Actif")!==false?'checked':''}></td><td><input data-ic-comment="${r.id}" value="${esc(F(r,"Commentaire")||"")}"></td><td><button class="table-action" data-ic-save="${r.id}">Enregistrer</button></td></tr>`).join(""):'<tr><td colspan="7">Aucun code configuré.</td></tr>';
+  for(const r of S.importConfigRows){const s=document.querySelector(`[data-ic-motif="${r.id}"]`);if(s)s.value=String(rid(F(r,"Motif"))||"");const t=document.querySelector(`[data-ic-type="${r.id}"]`);if(t)t.value=norm(F(r,"Type_Demande"))||"CONGE";}
+  document.querySelectorAll('[data-ic-save]').forEach(b=>b.onclick=()=>saveImportConfigRow(Number(b.dataset.icSave)).catch(e=>showImportConfigMsg(e?.message||String(e),"danger")));
+}
+async function saveImportConfigRow(id){
+  const code=importCode(document.querySelector(`[data-ic-code="${id}"]`)?.value),motif=Number(document.querySelector(`[data-ic-motif="${id}"]`)?.value||0);if(!code||!motif)throw new Error("Code import et motif RH obligatoires.");
+  await grist.getTable(T.importConfig).update({id,fields:{Code_Import:code,Motif:motif,Type_Demande:document.querySelector(`[data-ic-type="${id}"]`)?.value||"CONGE",Confiance_Min:Number(document.querySelector(`[data-ic-conf="${id}"]`)?.value||70),Actif:!!document.querySelector(`[data-ic-active="${id}"]`)?.checked,Commentaire:norm(document.querySelector(`[data-ic-comment="${id}"]`)?.value)}});await renderImportConfigAdmin();showImportConfigMsg(`Code ${code} enregistré.`);
+}
+async function addImportConfigRow(){await ensureImportTables();await grist.getTable(T.importConfig).create({fields:{Code_Import:"",Type_Demande:"CONGE",Confiance_Min:70,Actif:true}});await renderImportConfigAdmin()}
+function fillImportResourceSelect(){
+  const s=$("importResource");if(!s)return;const list=importAccessibleResources();s.innerHTML=list.map(r=>`<option value="${r.id}">${esc(F(r,"Nom")||F(r,"Email")||("#"+r.id))}</option>`).join("");if(S.person&&list.some(r=>r.id===S.person.id))s.value=String(S.person.id);s.disabled=list.length===1;
+}
+async function renderImportConges(){
+  if(!importCongesAllowed())return;
+  fillImportResourceSelect();await loadImportConfig();
+  const year=$("importYear");if(year&&!year.value)year.value=String(new Date().getFullYear());
+  const info=$("importConfigStatus");if(info)info.textContent=S.importConfigRows.length?`${importActiveMappings().length} code(s) OCR actif(s).`:`Table de paramétrage absente ou vide.`;
+  renderImportDrafts();
+}
+function importNormalizeWord(w){return importCode(w?.text||w)}
+function wordCenter(w){const b=w.bbox||{};return {x:((b.x0||0)+(b.x1||0))/2,y:((b.y0||0)+(b.y1||0))/2}}
+const IMPORT_MONTHS={JANVIER:1,FEVRIER:2,FÉVRIER:2,MARS:3,AVRIL:4,MAI:5,JUIN:6,JUILLET:7,AOUT:8,AOÛT:8,SEPTEMBRE:9,OCTOBRE:10,NOVEMBRE:11,DECEMBRE:12,DÉCEMBRE:12};
+function normMonthWord(v){return norm(v).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z]/g,'')}
+function detectGridFromWords(words){
+  const numeric=words.filter(w=>{const t=norm(w.text);return /^\d{1,2}$/.test(t)&&Number(t)>=1&&Number(t)<=31});
+  const bins=new Map();for(const w of numeric){const y=wordCenter(w).y,k=Math.round(y/12)*12;if(!bins.has(k))bins.set(k,[]);bins.get(k).push(w)}
+  const dayRow=[...bins.values()].sort((a,b)=>new Set(b.map(w=>Number(norm(w.text)))).size-new Set(a.map(w=>Number(norm(w.text)))).size)[0]||[];
+  const dayX={};for(const w of dayRow){const d=Number(norm(w.text));if(!dayX[d])dayX[d]=wordCenter(w).x}
+  const monthPoints=[];for(const w of words){const key=normMonthWord(w.text),m=IMPORT_MONTHS[key];if(m)monthPoints.push({m,y:wordCenter(w).y})}
+  const uniq=new Map();for(const p of monthPoints)if(!uniq.has(p.m))uniq.set(p.m,p.y);
+  const pts=[...uniq.entries()].map(([m,y])=>({m,y})).sort((a,b)=>a.m-b.m);
+  if(Object.keys(dayX).length<10)throw new Error("En-tête des jours 01–31 non détecté avec assez de fiabilité.");
+  if(pts.length<6)throw new Error("Les lignes des mois ne sont pas suffisamment reconnues.");
+  const n=pts.length,sm=pts.reduce((s,p)=>s+p.m,0),sy=pts.reduce((s,p)=>s+p.y,0),smm=pts.reduce((s,p)=>s+p.m*p.m,0),smy=pts.reduce((s,p)=>s+p.m*p.y,0),den=n*smm-sm*sm;
+  const slope=den?(n*smy-sm*sy)/den:0,intercept=(sy-slope*sm)/n;const monthY={};for(let m=1;m<=12;m++)monthY[m]=uniq.get(m)??(intercept+slope*m);
+  return {dayX,monthY};
+}
+function nearestKey(map,value){let best=null,dist=Infinity;for(const [k,v] of Object.entries(map)){const d=Math.abs(v-value);if(d<dist){dist=d;best=Number(k)}}return {key:best,dist}}
+function isoFromYMD(y,m,d){const dt=new Date(Date.UTC(y,m-1,d));if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==m-1||dt.getUTCDate()!==d)return "";return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
+function groupImportDetections(items){
+  const sorted=items.slice().sort((a,b)=>a.date.localeCompare(b.date));const groups=[];
+  for(const it of sorted){const last=groups.at(-1);if(last&&last.code===it.code&&last.motifId===it.motifId){const a=new Date(last.end+'T00:00:00Z'),b=new Date(it.date+'T00:00:00Z'),gap=Math.round((b-a)/86400000);let merge=gap===1;if(!merge&&gap<=4){merge=true;for(let i=1;i<gap;i++){const x=new Date(a.getTime()+i*86400000).toISOString().slice(0,10);if(isCountablePresenceDay(x)){merge=false;break}}}if(merge){last.end=it.date;last.conf.push(it.conf);continue}}
+    groups.push({code:it.code,motifId:it.motifId,type:it.type,start:it.date,end:it.date,conf:[it.conf],minConf:it.minConf});
+  }
+  return groups.map(g=>({...g,confidence:Math.round(g.conf.reduce((a,b)=>a+b,0)/g.conf.length),selected:Math.round(g.conf.reduce((a,b)=>a+b,0)/g.conf.length)>=g.minConf}));
+}
+async function analyzeImportImage(){
+  const file=$("importImage")?.files?.[0];if(!file)throw new Error("Sélectionnez une image à analyser.");if(!window.Tesseract)throw new Error("Le moteur OCR n’a pas pu être chargé. Vérifiez l’accès au CDN Tesseract.js.");
+  await loadImportConfig();const maps=importActiveMappings();if(!maps.length)throw new Error("Aucun code actif dans PARAM_IMPORT_CONGES.");
+  const resourceId=Number($("importResource").value||0),year=Number($("importYear").value||0);if(!resourceId||!year)throw new Error("Ressource et année obligatoires.");
+  S.importFileName=file.name;S.importDrafts=[];showImportMsg("Analyse OCR en cours…");
+  const result=await Tesseract.recognize(file,'fra',{logger:m=>{if(m.status==='recognizing text')showImportMsg(`OCR : ${Math.round((m.progress||0)*100)} %`)}});
+  const words=result?.data?.words||[];if(!words.length)throw new Error("Aucun texte exploitable détecté dans l’image.");S.importOcrWords=words;
+  const grid=detectGridFromWords(words),byCode=new Map(maps.map(r=>[importCode(F(r,"Code_Import")),r])),detections=[];
+  const dayVals=Object.values(grid.dayX),monthVals=Object.values(grid.monthY);const daySpacing=dayVals.length>1?(Math.max(...dayVals)-Math.min(...dayVals))/(dayVals.length-1):30,monthSpacing=(Math.max(...monthVals)-Math.min(...monthVals))/11;
+  for(const w of words){const code=importNormalizeWord(w);const map=byCode.get(code);if(!map)continue;const c=wordCenter(w),nd=nearestKey(grid.dayX,c.x),nm=nearestKey(grid.monthY,c.y);if(!nd.key||!nm.key||nd.dist>daySpacing*.65||nm.dist>Math.abs(monthSpacing)*.48)continue;const date=isoFromYMD(year,nm.key,nd.key);if(!date)continue;detections.push({date,code,motifId:rid(F(map,"Motif")),type:norm(F(map,"Type_Demande"))||"CONGE",conf:Number(w.confidence||0),minConf:Number(F(map,"Confiance_Min")||70)});}
+  const unique=new Map();for(const d of detections){const k=`${d.date}|${d.code}`;if(!unique.has(k)||unique.get(k).conf<d.conf)unique.set(k,d)}
+  S.importDetectedCount=unique.size;S.importDrafts=groupImportDetections([...unique.values()]);renderImportDrafts();showImportMsg(`${unique.size} cellule(s) reconnue(s) · ${S.importDrafts.length} période(s) préparée(s).`);
+}
+function renderImportDrafts(){
+  const body=$("importDraftRows"),btn=$("importCreateRequestsBtn");if(!body)return;const list=S.importDrafts||[];
+  body.innerHTML=list.length?list.map((d,i)=>`<tr class="${d.selected?'':'import-low-confidence'}"><td><input type="checkbox" data-import-select="${i}" ${d.selected?'checked':''}></td><td><strong>${esc(d.code)}</strong></td><td>${esc(motifName(d.motifId))}</td><td>${dt(ep(d.start))}</td><td>${dt(ep(d.end))}</td><td><span class="import-confidence ${d.confidence>=d.minConf?'ok':'warn'}">${d.confidence}%</span></td></tr>`).join(''):'<tr><td colspan="6">Aucun brouillon. Chargez une image puis lancez l’analyse.</td></tr>';
+  document.querySelectorAll('[data-import-select]').forEach(c=>c.onchange=()=>{S.importDrafts[Number(c.dataset.importSelect)].selected=c.checked;updateImportCreateButton()});updateImportCreateButton();
+}
+function updateImportCreateButton(){const b=$("importCreateRequestsBtn");if(b)b.disabled=!(S.importDrafts||[]).some(x=>x.selected)}
+async function createImportedRequests(){
+  const selected=(S.importDrafts||[]).filter(x=>x.selected);if(!selected.length)throw new Error("Aucune période sélectionnée.");const resourceId=Number($("importResource").value||0),resource=(S.resources||[]).find(r=>r.id===resourceId);if(!resource)throw new Error("Ressource introuvable.");
+  await ensureImportTables();const now=Math.floor(Date.now()/1000),who=email(S.user?.email)||email(F(S.person||{},"Email"))||"";const runCreated=await grist.getTable(T.importRuns).create({fields:{Ressource:resourceId,Annee:Number($("importYear").value),Fichier_Nom:S.importFileName||"",Date_Import:now,Importe_Par:who,Statut:"EN_COURS",Nb_Codes_Detectes:Number(S.importDetectedCount||0),Nb_Demandes_Creees:0,Nb_Erreurs:0,Message:"Création des demandes"}});const runId=Number(runCreated?.id||runCreated);let createdCount=0,errors=0;
+  for(const d of selected){try{const u=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`,fields={Reference:`IMP-${new Date().getFullYear()}-${u.slice(0,8).toUpperCase()}`,Demandeur:resourceId,Type:d.type||"CONGE",Type_Action:"DEMANDE",Date_Debut:ep(d.start),Date_Fin:ep(d.end),Motif:d.motifId,Motif_Code:motifCode(d.motifId),Commentaire_Demandeur:`Import OCR ${S.importFileName||''} · code ${d.code}`,Statut:"EN_ATTENTE",Date_Demande:now,Date_Modification:now,UUID_Demande:u,Version_Sync:1};const cr=await grist.getTable(T.requests).create({fields}),requestId=Number(cr?.id||cr);await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"CREEE",Demande_Creee:requestId,Message:"Demande EN_ATTENTE créée"}});createdCount++;}catch(e){errors++;await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"ERREUR",Message:e?.message||String(e)}})}}
+  await grist.getTable(T.importRuns).update({id:runId,fields:{Statut:errors?"TERMINE_AVEC_ERREURS":"TERMINE",Nb_Demandes_Creees:createdCount,Nb_Erreurs:errors,Message:`${createdCount} demande(s) créée(s), ${errors} erreur(s).`}});S.importDrafts=[];renderImportDrafts();showImportMsg(`${createdCount} demande(s) créée(s) dans Demandes_RH. Elles seront prises en charge par la synchronisation.`,errors?"warn":"success");await load();
 }
 function renderAdmin(){
   if(!S.isOwner)return;
@@ -1157,6 +1307,36 @@ function planningDisplayForRow(row){
 }
 function resourceById(id){return (S.resources||[]).find(r=>Number(r.id)===Number(id))||null}
 function currentProfile(){return norm(F(S.person||{},"Profil","profil")).toUpperCase()}
+function planningRequestSelectionAllowed(){return !!S.person&&!S.viewAs&&requestMenusAllowed();}
+function planningDateInRequestSelection(iso){
+  const a=S.planningRequestStart,b=S.planningRequestEnd;if(!a||!b)return false;
+  const lo=a<=b?a:b,hi=a<=b?b:a;return iso>=lo&&iso<=hi;
+}
+function clearPlanningRequestSelection(){S.planningRequestStart="";S.planningRequestEnd="";renderPlanning();}
+function updatePlanningRequestBar(){
+  const bar=$("planningRequestBar"),label=$("planningRequestLabel");if(!bar)return;
+  const a=S.planningRequestStart,b=S.planningRequestEnd;
+  const visible=planningRequestSelectionAllowed()&&!!a&&!!b;
+  bar.classList.toggle("hidden",!visible);
+  if(label&&visible)label.textContent=a===b?`Demande pour le ${frenchDateShort(a)}`:`Demande du ${frenchDateShort(a<=b?a:b)} au ${frenchDateShort(a<=b?b:a)}`;
+}
+function selectPlanningRequestDate(iso,extend=false,code=""){
+  if(!planningRequestSelectionAllowed())return;
+  const today=localIsoToday();
+  if(!iso||iso<today||!isCountablePresenceDay(iso))return;
+  if(code==="A"||code==="AP")return;
+  if(extend&&S.planningRequestStart){S.planningRequestEnd=iso;}else{S.planningRequestStart=iso;S.planningRequestEnd=iso;}
+  renderPlanning();
+}
+function openRequestFromPlanning(){
+  if(!planningRequestSelectionAllowed())return;
+  let a=S.planningRequestStart,b=S.planningRequestEnd;if(!a||!b)return;
+  if(a>b)[a,b]=[b,a];
+  showView("new");reset();
+  $("start").value=a;$("end").value=b;
+  const msg=$("msg");if(msg){msg.textContent=`Période préremplie depuis le planning : ${frenchDateShort(a)}${a===b?"":` → ${frenchDateShort(b)}`}. Choisissez le motif puis envoyez la demande.`;msg.classList.remove("hidden","danger");}
+}
+
 function isPmo(){return currentProfile()==="PMO"}
 function isForecastAbsenceRequest(r){
   if(!r||st(r)!=="EN_ATTENTE"||isCancellationRequest(r))return false;
@@ -1560,11 +1740,11 @@ function renderPlanning(){
   applyPlanningKpiVisibility();
   const head=$("planningHead");if(head)head.innerHTML='<th class="sticky-col resource-col">Ressource</th><th class="sticky-col team-col">Équipe</th>'+dates.map(d=>{const h=frenchDayHeader(d);return `<th class="planning-day ${h.weekend?"weekend":""}"><span>${h.dow}</span><strong>${h.day}</strong></th>`}).join("");
   const body=$("planningBody");if(body)body.innerHTML=resources.length?resources.map(r=>{
-    const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,teamName=norm(F(r,"Equipe_Code","Equipe"))||"—",initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase(),canSeeDetails=canSeePlanningMotifDetails(id);
-    const cells=dates.map(d=>{const row=byResource.get(id)?.get(d),h=frenchDayHeader(d),display=planningDisplayForRow(row),forecastRequests=forecastByResource.get(id)?.get(d)||[],showWorked=$("planningShowWorked")?.checked!==false,showAbsence=$("planningShowAbsence")?.checked!==false,showForecast=$("planningShowForecast")?.checked!==false;let code="",usingForecast=false;if(forecastRequests.length&&showForecast){code="AP";usingForecast=true;}else if(display.code==="P"&&showWorked)code="P";else if(display.code==="A"&&showAbsence)code="A";let title="Aucune donnée synchronisée";if(usingForecast){if(canSeeDetails){const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");title=`Absence prévisionnelle · ${details}`;}else title="Absence prévisionnelle";}else if(row){if(canSeeDetails){const motifCode=norm(F(row,"Motif_Code")),motifLabel=planningOriginalMotifLabel(row),original=[motifLabel,motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);title=original.join(" · ")||"Donnée synchronisée";}else title=code?display.reason:"Aucune information de présence affichable";}let motifColor="";if(canSeeDetails&&code&&!usingForecast&&row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));const chipStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""}" title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}"${chipStyle}>${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;}).join("");
-    const isConnectedUser=id===Number(S.person?.id||0);
+    const id=Number(r.id),name=norm(F(r,"Nom"))||email(F(r,"Email"))||`Ressource ${id}`,teamName=norm(F(r,"Equipe_Code","Equipe"))||"—",initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase(),canSeeDetails=canSeePlanningMotifDetails(id),isConnectedUser=id===Number(S.person?.id||0);
+    const cells=dates.map(d=>{const row=byResource.get(id)?.get(d),h=frenchDayHeader(d),display=planningDisplayForRow(row),forecastRequests=forecastByResource.get(id)?.get(d)||[],showWorked=$("planningShowWorked")?.checked!==false,showAbsence=$("planningShowAbsence")?.checked!==false,showForecast=$("planningShowForecast")?.checked!==false;let code="",usingForecast=false;if(forecastRequests.length&&showForecast){code="AP";usingForecast=true;}else if(display.code==="P"&&showWorked)code="P";else if(display.code==="A"&&showAbsence)code="A";let title="Aucune donnée synchronisée";if(usingForecast){if(canSeeDetails){const details=forecastRequests.map(req=>`${motifName(rid(F(req,"Motif")))}${F(req,"Reference")?` · ${F(req,"Reference")}`:""}`).join(" / ");title=`Absence prévisionnelle · ${details}`;}else title="Absence prévisionnelle";}else if(row){if(canSeeDetails){const motifCode=norm(F(row,"Motif_Code")),motifLabel=planningOriginalMotifLabel(row),original=[motifLabel,motifCode,norm(F(row,"Statut")),norm(F(row,"Commentaire"))].filter(Boolean);title=original.join(" · ")||"Donnée synchronisée";}else title=code?display.reason:"Aucune information de présence affichable";}let motifColor="";if(canSeeDetails&&code&&!usingForecast&&row)motifColor=presenceColorForMotifCode(norm(F(row,"Motif_Code")));const chipStyle=motifColor?` style="${presenceChipStyle(motifColor)}"`:"";const selectable=isConnectedUser&&planningRequestSelectionAllowed()&&d>=localIsoToday()&&isCountablePresenceDay(d)&&code!=="A"&&code!=="AP";const selected=isConnectedUser&&planningDateInRequestSelection(d);if(selectable)title=`${title} · Cliquez pour préparer une demande${S.planningRequestStart?" · Shift+clic pour étendre la période":""}`;return `<td class="planning-cell ${h.weekend?"weekend":""} ${usingForecast?"forecast-cell":""} ${selectable?"planning-request-selectable":""} ${selected?"planning-request-selected":""}" ${isConnectedUser?`data-self-date="${esc(d)}" data-self-code="${esc(code)}"`:""} title="${esc(title)}">${code?`<span class="presence-chip status-${esc(code.toLowerCase())}"${chipStyle}>${esc(code)}</span>`:'<span class="presence-empty">—</span>'}</td>`;}).join("");
     return `<tr class="${isConnectedUser?"planning-self-row":""}"${isConnectedUser?' aria-current="true"':''}><td class="sticky-col resource-col"><div class="resource-name"><span class="resource-avatar">${esc(initials||"R")}</span><strong>${esc(name)}</strong>${isConnectedUser?'<span class="planning-self-badge" title="Votre ligne">Moi</span>':''}<button type="button" class="resource-calendar-btn" data-annual-resource="${id}" title="Voir le calendrier annuel de ${esc(name)}" aria-label="Voir le calendrier annuel de ${esc(name)}">▦</button></div></td><td class="sticky-col team-col" title="${esc(teamName)}">${esc(teamName)}</td>${cells}</tr>`;
   }).join(""):`<tr><td colspan="${dates.length+2}" class="planning-empty">Aucune présence synchronisée sur cette période.</td></tr>`;
+  updatePlanningRequestBar();
   const latest=(S.planningRows||[]).map(r=>Number(F(r,"Derniere_Sync")||0)).filter(Boolean).sort((a,b)=>b-a)[0],sync=$("planningSync");if(sync)sync.textContent=latest?`Synchronisé · ${new Date(latest*1000).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:"En attente de synchronisation";
 }
 
@@ -1955,6 +2135,10 @@ async function boot(){
   if($("planningForecastColorHex")){ $("planningForecastColorHex").oninput=e=>{const raw=norm(e.target.value).toUpperCase();e.target.value=raw;if(validHexColor(raw))syncPlanningForecastColorUi(raw);}; $("planningForecastColorHex").onblur=e=>{if(!syncPlanningForecastColorUi(e.target.value))syncPlanningForecastColorUi(forecastColor());}; }
   if($("planningForecastColorDefault")) $("planningForecastColorDefault").onclick=()=>syncPlanningForecastColorUi("#FFD54F");
   if($("initPlanningKpiBtn")) $("initPlanningKpiBtn").onclick=()=>ensurePlanningKpiTable().then(loadPlanningKpiRules).catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
+  if($("initImportTablesBtn")) $("initImportTablesBtn").onclick=()=>ensureImportTables().then(renderImportConfigAdmin).then(()=>showImportConfigMsg("Tables d’import initialisées / complétées.")).catch(e=>showImportConfigMsg(e?.message||String(e),"danger"));
+  if($("addImportConfigRowBtn")) $("addImportConfigRowBtn").onclick=()=>addImportConfigRow().catch(e=>showImportConfigMsg(e?.message||String(e),"danger"));
+  if($("importAnalyzeBtn")) $("importAnalyzeBtn").onclick=()=>analyzeImportImage().catch(e=>showImportMsg(e?.message||String(e),"danger"));
+  if($("importCreateRequestsBtn")) $("importCreateRequestsBtn").onclick=()=>createImportedRequests().catch(e=>showImportMsg(e?.message||String(e),"danger"));
   if($("savePlanningKpiRolesBtn")) $("savePlanningKpiRolesBtn").onclick=()=>savePlanningKpiRoleRules().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
   if($("addPlanningKpiOverrideBtn")) $("addPlanningKpiOverrideBtn").onclick=()=>addPlanningKpiOverride().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
   if($("planningWeekChoices")) $("planningWeekChoices").addEventListener("change",()=>{const vals=[...document.querySelectorAll('#planningWeekChoices input[type="checkbox"]:checked')].map(x=>Number(x.value)).sort((a,b)=>a-b);const sel=$("planningDefaultWeeks");if(sel&&vals.length){const cur=Number(sel.value);sel.innerHTML=vals.map(n=>`<option value="${n}">${n} semaine${n>1?"s":""}</option>`).join("");sel.value=String(vals.includes(cur)?cur:vals[0]);}});
@@ -1994,12 +2178,16 @@ async function boot(){
   if($("planningAnnualTeamAvailabilityModal")) $("planningAnnualTeamAvailabilityModal").onclick=e=>{if(e.target===$("planningAnnualTeamAvailabilityModal"))closePlanningAnnualTeamAvailability();};
   if($("planningBody")) $("planningBody").addEventListener("click",e=>{
     const btn=e.target.closest?.("[data-annual-resource]");
-    if(!btn||!$("planningBody").contains(btn))return;
+    if(btn&&$("planningBody").contains(btn)){
+      e.preventDefault();e.stopPropagation();const id=Number(btn.dataset.annualResource||0);if(id)openAnnualPresence(id);return;
+    }
+    const cell=e.target.closest?.("[data-self-date]");
+    if(!cell||!$("planningBody").contains(cell))return;
     e.preventDefault();
-    e.stopPropagation();
-    const id=Number(btn.dataset.annualResource||0);
-    if(id)openAnnualPresence(id);
+    selectPlanningRequestDate(cell.dataset.selfDate,!!e.shiftKey,norm(cell.dataset.selfCode).toUpperCase());
   });
+  if($("planningCreateRequest")) $("planningCreateRequest").onclick=openRequestFromPlanning;
+  if($("planningClearRequest")) $("planningClearRequest").onclick=clearPlanningRequestSelection;
   if($("closeAnnualPresence")) $("closeAnnualPresence").onclick=closeAnnualPresence;
   if($("annualPresenceYear")) $("annualPresenceYear").onchange=e=>{S.annualPresenceYear=Number(e.target.value);renderAnnualPresence();};
   if($("annualPresenceModal")) $("annualPresenceModal").onclick=e=>{if(e.target===$("annualPresenceModal"))closeAnnualPresence();};
