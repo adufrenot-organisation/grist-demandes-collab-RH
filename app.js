@@ -1,4 +1,4 @@
-const VERSION="V1.98";
+const VERSION="V2.00";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS",importConfig:"PARAM_IMPORT_CONGES",importRuns:"IMPORT_CONGES",importLines:"IMPORT_CONGES_LIGNES"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null,planningRequestStart:"",planningRequestEnd:"",importConfigRows:[],importDrafts:[],importOcrWords:[],importFileName:"",importDetectedCount:0};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -1209,6 +1209,24 @@ function geometricDayColumns(ctx,monthWords,monthY){
   let xEnd=width;for(let x=width-1;x>Math.max(width*.72,xStart+31*6);x--){if(pixelRowVariance(ctx,x,ys)>120){xEnd=Math.min(width,x+1);break}}
   const usable=xEnd-xStart;if(!(usable>31*6))return {};const step=usable/31,out={};for(let d=1;d<=31;d++)out[d]=xStart+(d-.5)*step;return out;
 }
+function clusterYValues(values,tol){
+  const ys=values.filter(Number.isFinite).sort((a,b)=>a-b),clusters=[];
+  for(const y of ys){const c=clusters.at(-1);if(c&&Math.abs(y-c.mean)<=tol){c.values.push(y);c.mean=c.values.reduce((a,b)=>a+b,0)/c.values.length}else clusters.push({values:[y],mean:y})}
+  return clusters.map(c=>c.mean);
+}
+function geometricMonthRowsFromTokens(words,ctx){
+  const h=ctx?.canvas?.height||0;if(!h)return {};
+  const activeCodes=new Set(importActiveMappings().map(r=>importCode(F(r,"Code_Import"))).filter(Boolean));
+  const codeYs=words.filter(w=>activeCodes.has(importNormalizeWord(w))).map(w=>wordCenter(w).y);
+  const genericYs=words.filter(w=>{const t=importNormalizeWord(w);const y=wordCenter(w).y;return y>h*.12&&y<h*.82&&t&&t.length<=3&&/[A-Z]/.test(t)}).map(w=>wordCenter(w).y);
+  const raw=codeYs.length>=8?codeYs:genericYs;
+  const clusters=clusterYValues(raw,Math.max(5,h/120));if(clusters.length<5)return {};
+  let best=null;const minStep=Math.max(16,h/55),maxStep=Math.min(60,h/16);
+  for(let step=minStep;step<=maxStep;step+=.5){
+    for(const y of clusters){for(let k=0;k<12;k++){const y0=y-k*step;if(y0<h*.12||y0+11*step>h*.86)continue;let matches=0,error=0;for(const cy of clusters){const idx=Math.round((cy-y0)/step);if(idx<0||idx>11)continue;const d=Math.abs(cy-(y0+idx*step));if(d<=step*.34){matches++;error+=d}}const score=matches*100-error;if(!best||score>best.score)best={y0,step,matches,score}}}
+  }
+  if(!best||best.matches<5)return {};const out={};for(let m=1;m<=12;m++)out[m]=best.y0+(m-1)*best.step;return out;
+}
 function detectGridFromWords(words,ctx){
   const numeric=words.filter(w=>parseImportDayToken(w.text)!==null);
   const bins=new Map();for(const w of numeric){const y=wordCenter(w).y,k=Math.round(y/20)*20;if(!bins.has(k))bins.set(k,[]);bins.get(k).push(w)}
@@ -1218,13 +1236,16 @@ function detectGridFromWords(words,ctx){
   const monthPoints=[];for(const w of words){const key=normMonthWord(w.text),m=IMPORT_MONTHS[key];if(m)monthPoints.push({m,y:wordCenter(w).y,w})}
   const uniq=new Map();for(const p of monthPoints)if(!uniq.has(p.m))uniq.set(p.m,p.y);
   const pts=[...uniq.entries()].map(([m,y])=>({m,y})).sort((a,b)=>a.m-b.m);
-  if(pts.length<6)throw new Error("Les lignes des mois ne sont pas suffisamment reconnues.");
-  const n=pts.length,sm=pts.reduce((s,p)=>s+p.m,0),sy=pts.reduce((s,p)=>s+p.y,0),smm=pts.reduce((s,p)=>s+p.m*p.m,0),smy=pts.reduce((s,p)=>s+p.m*p.y,0),den=n*smm-sm*sm;
-  const slope=den?(n*smy-sm*sy)/den:0,intercept=(sy-slope*sm)/n;const monthY={};for(let m=1;m<=12;m++)monthY[m]=uniq.get(m)??(intercept+slope*m);
+  let monthY={},monthDetectionMode="OCR";
+  if(pts.length>=6){
+    const n=pts.length,sm=pts.reduce((s,p)=>s+p.m,0),sy=pts.reduce((s,p)=>s+p.y,0),smm=pts.reduce((s,p)=>s+p.m*p.m,0),smy=pts.reduce((s,p)=>s+p.m*p.y,0),den=n*smm-sm*sm;
+    const slope=den?(n*smy-sm*sy)/den:0,intercept=(sy-slope*sm)/n;for(let m=1;m<=12;m++)monthY[m]=uniq.get(m)??(intercept+slope*m);
+  }else{monthY=geometricMonthRowsFromTokens(words,ctx);monthDetectionMode="GEOMETRIE";}
+  if(Object.keys(monthY).length<12)throw new Error("Impossible de reconstruire les 12 lignes mensuelles à partir de l’image.");
   let dayX=reconstructDayColumns(dayRow),mode="OCR";
   if(exactDays.length<3||Object.keys(dayX).length<10){dayX=geometricDayColumns(ctx,monthPoints.map(p=>p.w),monthY);mode="GEOMETRIE";}
   if(Object.keys(dayX).length<31)throw new Error("Impossible de reconstruire les 31 colonnes de jours à partir de l’image.");
-  return {dayX,monthY,detectedDays:exactDays.length,dayDetectionMode:mode};
+  return {dayX,monthY,detectedDays:exactDays.length,dayDetectionMode:mode,monthDetectionMode};
 }
 function nearestKey(map,value){let best=null,dist=Infinity;for(const [k,v] of Object.entries(map)){const d=Math.abs(v-value);if(d<dist){dist=d;best=Number(k)}}return {key:best,dist}}
 function isoFromYMD(y,m,d){const dt=new Date(Date.UTC(y,m-1,d));if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==m-1||dt.getUTCDate()!==d)return "";return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
@@ -1244,20 +1265,64 @@ function representativeWordColor(ctx,w){
   const data=ctx.getImageData(x0,y0,x1-x0,y1-y0).data,px=[];for(let i=0;i<data.length;i+=4){const r=data[i],g=data[i+1],bb=data[i+2],max=Math.max(r,g,bb),min=Math.min(r,g,bb);if(max-min>24&&max>70)px.push({r,g,b:bb});}
   if(!px.length)return null;px.sort((a,b)=>(a.r+a.g+a.b)-(b.r+b.g+b.b));return px[Math.floor(px.length/2)];
 }
+function importPixelColorful(r,g,b){const mx=Math.max(r,g,b),mn=Math.min(r,g,b);return mx-mn>24&&mx>85&&mn<248}
+function detectPlanningGridByPixels(ctx){
+  const w=ctx?.canvas?.width||0,h=ctx?.canvas?.height||0;if(w<500||h<350)return null;
+  const img=ctx.getImageData(0,0,w,h).data,rowCounts=new Array(h).fill(0),x0scan=Math.floor(w*.06),yMin=Math.floor(h*.15),yMax=Math.floor(h*.74);
+  for(let y=yMin;y<yMax;y++){let n=0,off=(y*w+x0scan)*4;for(let x=x0scan;x<w;x++,off+=4)if(importPixelColorful(img[off],img[off+1],img[off+2]))n++;rowCounts[y]=n}
+  const threshold=Math.max(70,Math.floor(w*.065)),segments=[];let sy=null;
+  for(let y=yMin;y<yMax;y++){if(rowCounts[y]>=threshold){if(sy===null)sy=y}else if(sy!==null){if(y-sy>=Math.max(40,h*.08))segments.push({y0:sy,y1:y});sy=null}}
+  if(sy!==null)segments.push({y0:sy,y1:yMax});
+  let seg=segments.filter(a=>a.y1-a.y0>=h*.24&&a.y1-a.y0<=h*.58).sort((a,b)=>(b.y1-b.y0)-(a.y1-a.y0))[0]||null;
+  let y0=seg?.y0??Math.round(h*.232),y1=seg?.y1??Math.round(h*.671);
+  if(y1-y0<h*.20){y0=Math.round(h*.232);y1=Math.round(h*.671)}
+  const colCounts=new Array(w).fill(0);for(let y=y0;y<y1;y++){let off=(y*w)*4;for(let x=0;x<w;x++,off+=4)if(importPixelColorful(img[off],img[off+1],img[off+2]))colCounts[x]++}
+  const cth=Math.max(8,Math.floor((y1-y0)*.025));let x0=-1,x1=-1;for(let x=Math.floor(w*.05);x<w;x++)if(colCounts[x]>=cth){x0=x;break}for(let x=w-1;x>=0;x--)if(colCounts[x]>=cth){x1=x+1;break}
+  if(x0<0||x1<=x0||x1-x0<w*.55){x0=Math.round(w*.097);x1=w}
+  const stepX=(x1-x0)/31,stepY=(y1-y0)/12;if(stepX<10||stepY<10)return null;
+  const dayX={},monthY={};for(let d=1;d<=31;d++)dayX[d]=x0+(d-.5)*stepX;for(let m=1;m<=12;m++)monthY[m]=y0+(m-.5)*stepY;
+  return {x0,x1,y0,y1,stepX,stepY,dayX,monthY,dayDetectionMode:"CELLULES",monthDetectionMode:"CELLULES"};
+}
+function importCellBounds(grid,m,d){const x0=grid.x0+(d-1)*grid.stepX,y0=grid.y0+(m-1)*grid.stepY;return {x0,y0,x1:x0+grid.stepX,y1:y0+grid.stepY}}
+function importCellColor(ctx,grid,m,d){const b=importCellBounds(grid,m,d),x0=Math.max(0,Math.floor(b.x0+2)),y0=Math.max(0,Math.floor(b.y0+2)),x1=Math.min(ctx.canvas.width,Math.ceil(b.x1-2)),y1=Math.min(ctx.canvas.height,Math.ceil(b.y1-2));if(x1<=x0||y1<=y0)return null;const a=ctx.getImageData(x0,y0,x1-x0,y1-y0).data,px=[];for(let i=0;i<a.length;i+=4){const r=a[i],g=a[i+1],bb=a[i+2];if(importPixelColorful(r,g,bb))px.push({r,g,b:bb})}if(!px.length)return null;px.sort((u,v)=>(u.r+u.g+u.b)-(v.r+v.g+v.b));return px[Math.floor(px.length/2)]}
+function buildImportGridCanvas(ctx,grid,variant="MASK"){
+  const slotW=112,slotH=76,padX=12,padY=10,c=document.createElement("canvas");c.width=31*slotW;c.height=12*slotH;const o=c.getContext("2d",{willReadFrequently:true});o.fillStyle="#fff";o.fillRect(0,0,c.width,c.height);o.imageSmoothingEnabled=false;
+  const tmp=document.createElement("canvas"),t=tmp.getContext("2d",{willReadFrequently:true});
+  for(let m=1;m<=12;m++)for(let d=1;d<=31;d++){
+    const b=importCellBounds(grid,m,d),sx=Math.max(0,Math.floor(b.x0+1)),sy=Math.max(0,Math.floor(b.y0+1)),sw=Math.max(2,Math.floor(b.x1-b.x0-2)),sh=Math.max(2,Math.floor(b.y1-b.y0-2));
+    tmp.width=sw;tmp.height=sh;t.clearRect(0,0,sw,sh);t.drawImage(ctx.canvas,sx,sy,sw,sh,0,0,sw,sh);
+    if(variant==="MASK"){
+      const id=t.getImageData(0,0,sw,sh),a=id.data;for(let i=0;i<a.length;i+=4){const r=a[i],g=a[i+1],bb=a[i+2],mx=Math.max(r,g,bb),mn=Math.min(r,g,bb),lum=.299*r+.587*g+.114*bb,ch=mx-mn;const ink=lum<185&&ch<58;a[i]=a[i+1]=a[i+2]=ink?0:255;a[i+3]=255}t.putImageData(id,0,0);
+    }else if(variant==="GRAY"){
+      const id=t.getImageData(0,0,sw,sh),a=id.data;for(let i=0;i<a.length;i+=4){const v=Math.round(.299*a[i]+.587*a[i+1]+.114*a[i+2]);a[i]=a[i+1]=a[i+2]=v;a[i+3]=255}t.putImageData(id,0,0);
+    }
+    o.drawImage(tmp,0,0,sw,sh,(d-1)*slotW+padX,(m-1)*slotH+padY,slotW-2*padX,slotH-2*padY);
+  }
+  return {canvas:c,slotW,slotH};
+}
+function importEditDistance(a,b){const dp=Array.from({length:a.length+1},()=>new Array(b.length+1).fill(0));for(let i=0;i<=a.length;i++)dp[i][0]=i;for(let j=0;j<=b.length;j++)dp[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return dp[a.length][b.length]}
+function importTokenVariants(token){const out=new Set([token]),alts={"0":["O"],"1":["I","L"],"5":["S"],"7":["T"]};for(let i=0;i<token.length;i++)for(const r of (alts[token[i]]||[]))out.add(token.slice(0,i)+r+token.slice(i+1));return [...out]}
+function matchConfiguredImportCode(token,codes){const t=importCode(token);if(!t)return null;for(const v of importTokenVariants(t))if(codes.has(v))return {code:v,corrected:v!==t};const near=[...codes].filter(c=>c.length===t.length&&importEditDistance(t,c)===1);return near.length===1?{code:near[0],corrected:true}:null}
+async function recognizeImportGridCanvas(gridCanvas,maps,label,progressBase,progressSpan){
+  const codes=new Set(maps.map(r=>importCode(F(r,"Code_Import"))).filter(Boolean));const out=[];
+  const res=await Tesseract.recognize(gridCanvas.canvas,'fra',{tessedit_pageseg_mode:'11',tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',logger:m=>{if(m.status==='recognizing text')showImportMsg(`${label} : ${Math.round(progressBase+(m.progress||0)*progressSpan)} %`)}});
+  for(const w of (res?.data?.words||[])){const raw=importCode(w.text),match=matchConfiguredImportCode(raw,codes);if(!match)continue;const c=wordCenter(w),d=Math.floor(c.x/gridCanvas.slotW)+1,m=Math.floor(c.y/gridCanvas.slotH)+1;if(d<1||d>31||m<1||m>12)continue;let conf=Number(w.confidence||0);if(match.corrected)conf=Math.max(0,conf-10);out.push({m,d,code:match.code,conf,raw})}
+  return out;
+}
 async function analyzeImportImage(){
   const file=$("importImage")?.files?.[0];if(!file)throw new Error("Sélectionnez une image à analyser.");if(!window.Tesseract)throw new Error("Le moteur OCR n’a pas pu être chargé. Vérifiez l’accès au CDN Tesseract.js.");
-  if(await importTableExists(T.importConfig))await ensureImportTables();
-  await loadImportConfig();const maps=importActiveMappings();if(!maps.length)throw new Error("Aucun code actif dans PARAM_IMPORT_CONGES.");
+  if(await importTableExists(T.importConfig))await ensureImportTables();await loadImportConfig();const maps=importActiveMappings();if(!maps.length)throw new Error("Aucun code actif dans PARAM_IMPORT_CONGES.");
   const resourceId=Number($("importResource").value||0),year=Number($("importYear").value||0);if(!resourceId||!year)throw new Error("Ressource et année obligatoires.");
-  S.importFileName=file.name;S.importDrafts=[];showImportMsg("Analyse OCR en cours…");
-  const [{ctx},result]=await Promise.all([importImageCanvas(file),Tesseract.recognize(file,'fra',{logger:m=>{if(m.status==='recognizing text')showImportMsg(`OCR : ${Math.round((m.progress||0)*100)} %`)}})]);
-  const words=result?.data?.words||[];if(!words.length)throw new Error("Aucun texte exploitable détecté dans l’image.");S.importOcrWords=words;
-  const grid=detectGridFromWords(words,ctx),byCode=new Map(maps.map(r=>[importCode(F(r,"Code_Import")),r])),detections=[];
-  const dayVals=Object.values(grid.dayX),monthVals=Object.values(grid.monthY);const daySpacing=dayVals.length>1?(Math.max(...dayVals)-Math.min(...dayVals))/(dayVals.length-1):30,monthSpacing=(Math.max(...monthVals)-Math.min(...monthVals))/11;
-  for(const w of words){const code=importNormalizeWord(w);const map=byCode.get(code);if(!map)continue;const c=wordCenter(w),nd=nearestKey(grid.dayX,c.x),nm=nearestKey(grid.monthY,c.y);if(!nd.key||!nm.key||nd.dist>daySpacing*.65||nm.dist>Math.abs(monthSpacing)*.48)continue;const date=isoFromYMD(year,nm.key,nd.key);if(!date)continue;const expected=validHexColor(F(map,"Couleur_Attendue")),sample=expected?representativeWordColor(ctx,w):null,tol=Math.max(0,Number(F(map,"Tolerance_Couleur")??80));if(expected&&sample&&rgbDistance(hexRgb(expected),sample)>tol)continue;detections.push({date,code,motifId:rid(F(map,"Motif"))||importDefaultMotifId(),type:norm(F(map,"Type_Demande"))||importDefaultType(),conf:Number(w.confidence||0),minConf:Number(F(map,"Confiance_Min")||70),createRequest:F(map,"Creer_Demande")!==false,colorExpected:expected});}
+  S.importFileName=file.name;S.importDrafts=[];showImportMsg("Détection géométrique de la grille…");
+  const {ctx}=await importImageCanvas(file),grid=detectPlanningGridByPixels(ctx);if(!grid)throw new Error("La zone planning 12 × 31 n’a pas pu être détectée dans cette image.");
+  showImportMsg("Préparation des 372 cellules…");const maskGrid=buildImportGridCanvas(ctx,grid,"MASK"),grayGrid=buildImportGridCanvas(ctx,grid,"GRAY");
+  const first=await recognizeImportGridCanvas(maskGrid,maps,"OCR cellules",0,55);let second=[];if(first.length<8)second=await recognizeImportGridCanvas(grayGrid,maps,"OCR secours",55,45);else showImportMsg("OCR cellules : 100 %");
+  const byCode=new Map(maps.map(r=>[importCode(F(r,"Code_Import")),r])),detections=[],candidates=[...first,...second];
+  for(const q of candidates){const map=byCode.get(q.code);if(!map)continue;const date=isoFromYMD(year,q.m,q.d);if(!date)continue;const expected=validHexColor(F(map,"Couleur_Attendue")),sample=expected?importCellColor(ctx,grid,q.m,q.d):null,tol=Math.max(0,Number(F(map,"Tolerance_Couleur")??80));if(expected&&sample&&rgbDistance(hexRgb(expected),sample)>tol)continue;detections.push({date,code:q.code,motifId:rid(F(map,"Motif"))||importDefaultMotifId(),type:norm(F(map,"Type_Demande"))||importDefaultType(),conf:q.conf,minConf:Number(F(map,"Confiance_Min")||70),createRequest:F(map,"Creer_Demande")!==false,colorExpected:expected});}
   const unique=new Map();for(const d of detections){const k=`${d.date}|${d.code}`;if(!unique.has(k)||unique.get(k).conf<d.conf)unique.set(k,d)}
-  S.importDetectedCount=unique.size;S.importDrafts=groupImportDetections([...unique.values()]);renderImportDrafts();showImportMsg(`${unique.size} cellule(s) reconnue(s) · ${S.importDrafts.length} période(s) préparée(s) · jours: ${grid.dayDetectionMode==="GEOMETRIE"?"grille géométrique":"OCR"}.`);
+  S.importDetectedCount=unique.size;S.importDrafts=groupImportDetections([...unique.values()]);renderImportDrafts();showImportMsg(`${unique.size} cellule(s) reconnue(s) · ${S.importDrafts.length} période(s) préparée(s) · moteur : grille 12×31 + OCR cellule par cellule.`);
 }
+
 function renderImportDrafts(){
   const body=$("importDraftRows"),btn=$("importCreateRequestsBtn");if(!body)return;const list=S.importDrafts||[];
   body.innerHTML=list.length?list.map((d,i)=>`<tr class="${d.createRequest?(d.selected?'':'import-low-confidence'):'import-no-request'}"><td><input type="checkbox" data-import-select="${i}" ${d.selected?'checked':''} ${d.createRequest?'':'disabled'}></td><td><strong>${esc(d.code)}</strong></td><td>${esc(motifName(d.motifId))}</td><td>${dt(ep(d.start))}</td><td>${dt(ep(d.end))}</td><td><span class="import-confidence ${d.confidence>=d.minConf?'ok':'warn'}">${d.confidence}%</span></td><td><span class="state ${d.createRequest?'ok':'off'}">${d.createRequest?'Demande':'Reconnu uniquement'}</span></td></tr>`).join(''):'<tr><td colspan="7">Aucun brouillon. Chargez une image puis lancez l’analyse.</td></tr>';
