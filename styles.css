@@ -980,3 +980,11 @@ main > header.app-header .header-identity{
 
 /* V2.04 — affichage à la volée des motifs réels dans les vues annuelles */
 .annual-detail-toggle-row{display:flex;justify-content:flex-end;margin:0 0 10px}.annual-detail-toggle{display:inline-flex!important;align-items:center;gap:7px;font-size:11px!important;font-weight:800!important;color:#44536b!important;text-transform:none!important;letter-spacing:0!important;cursor:pointer}.annual-detail-toggle input{width:16px;height:16px;margin:0;accent-color:#5577ba}.annual-presence-controls{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap}.annual-presence-controls .annual-detail-toggle{padding-bottom:3px}.availability-status span{white-space:nowrap;min-width:18px;padding-left:2px;padding-right:2px}
+
+/* V2.06 — restauration du rendu annuel et toggles de motifs réels */
+.planning-team-availability-table td.availability-status span,
+.annual-day.day-p,
+.annual-day.day-a,
+.annual-day.day-ap{opacity:1!important;filter:none!important;}
+.annual-detail-toggle:not(.hidden){pointer-events:auto!important;opacity:1!important;}
+.annual-detail-toggle input[type="checkbox"]{pointer-events:auto!important;cursor:pointer!important;opacity:1!important;}

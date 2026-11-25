@@ -1,4 +1,4 @@
-const VERSION="V2.05";
+const VERSION="V2.06";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS",importConfig:"PARAM_IMPORT_CONGES",importRuns:"IMPORT_CONGES",importLines:"IMPORT_CONGES_LIGNES"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null,planningAnnualShowRealMotifs:false,annualPresenceShowRealMotifs:false,planningRequestStart:"",planningRequestEnd:"",importConfigRows:[],importDrafts:[],importOcrWords:[],importFileName:"",importDetectedCount:0};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -1220,7 +1220,7 @@ function geometricDayColumns(ctx,monthWords,monthY){
   const centers=monthWords.map(w=>wordCenter(w).x).filter(Number.isFinite).sort((a,b)=>a-b),medianCenter=centers.length?centers[Math.floor(centers.length/2)]:width*.05;
   const minX=Math.max(Math.round(maxMonthX1+4),Math.round(width*.055)),maxX=Math.min(Math.round(width*.25),Math.round(width-31*6));let xStart=null;
   for(let x=minX;x<=maxX;x++){let ok=true;for(let k=0;k<4;k++){if(pixelRowVariance(ctx,x+k,ys)<180){ok=false;break}}if(ok){xStart=x;break}}
-  if(xStart===null)xStart=Math.max(maxMonthX1+8,Math.min(width*.2,medianCenter*2.05));
+  if(xStart===null)xStart=Math.max(maxMonthX1+8,Math.min(width*.2,medianCenter*2.06));
   let xEnd=width;for(let x=width-1;x>Math.max(width*.72,xStart+31*6);x--){if(pixelRowVariance(ctx,x,ys)>120){xEnd=Math.min(width,x+1);break}}
   const usable=xEnd-xStart;if(!(usable>31*6))return {};const step=usable/31,out={};for(let d=1;d<=31;d++)out[d]=xStart+(d-.5)*step;return out;
 }
@@ -1649,19 +1649,27 @@ function planningRealMotifInfo(row){
 }
 
 
+function isConnectedResource(resourceId){
+  const id=Number(resourceId||0),person=S.person||null;if(!id||!person)return false;
+  if(Number(person.id||0)===id)return true;
+  const resource=resourceById(id);if(!resource)return false;
+  const personUuid=norm(F(person,"UUID_Ressource")),resourceUuid=norm(F(resource,"UUID_Ressource"));
+  if(personUuid&&resourceUuid&&personUuid===resourceUuid)return true;
+  const personEmail=email(F(person,"Email","email")),resourceEmail=email(F(resource,"Email","email"));
+  return !!personEmail&&personEmail===resourceEmail;
+}
 function canShowIndividualRealMotifToggle(resourceId){
-  return Number(resourceId||0)===Number(S.person?.id||0);
+  return isConnectedResource(resourceId);
 }
 function canSeeTeamAvailabilityRealMotif(resourceId){
-  const id=Number(resourceId||0);
-  if(!id)return false;
+  const id=Number(resourceId||0);if(!id)return false;
   if(S.isOwner)return true;
-  if(currentProfile()!=="MANAGER")return false;
-  if((S.managedResources||[]).some(x=>Number(x.id)===id))return true;
-  return (S.managerLinks||[]).some(x=>F(x,"Actif")!==false&&Number(rid(F(x,"Ressource")))===id);
+  // La liste des ressources du calendrier annuel est déjà bornée par le périmètre du manager.
+  // On réutilise donc le droit de détail du planning pour ne pas perdre les couleurs/motifs existants.
+  return currentProfile()==="MANAGER"&&canSeePlanningMotifDetails(id);
 }
 function canShowTeamAvailabilityRealMotifToggle(resources){
-  if(S.isOwner)return true;
+  if(S.isOwner)return (resources||[]).length>0;
   if(currentProfile()!=="MANAGER")return false;
   return (resources||[]).some(r=>canSeeTeamAvailabilityRealMotif(r.id));
 }
@@ -1812,7 +1820,8 @@ function renderAnnualPresence(){
   const rate=$("annualPresenceRateKpi");if(rate)rate.textContent=stats.rate===null?"Taux de présence —":`Taux de présence ${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;
   const abs=$("annualAbsenceKpi");if(abs)abs.textContent=`${stats.absence} jour${stats.absence>1?"s":""} d’absence`;
   const {confirmed,forecast}=annualCalendarData(resourceId,year);
-  const canSeeDetails=canShowIndividualRealMotifToggle(resourceId);
+  // Les droits de couleur/détail existants restent inchangés. La case, elle, reste réservée au calendrier propre de la ressource.
+  const canSeeDetails=canSeePlanningMotifDetails(resourceId);
   const monthNames=Array.from({length:12},(_,m)=>new Date(year,m,1).toLocaleDateString("fr-FR",{month:"long"}));
   const weekdays=["L","M","M","J","V","S","D"];
   const html=monthNames.map((monthName,m)=>{
