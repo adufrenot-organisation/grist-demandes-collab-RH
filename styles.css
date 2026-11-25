@@ -971,3 +971,9 @@ main > header.app-header .header-identity{
 
 /* V1.96 — valeurs par défaut import OCR */
 .import-defaults{display:grid;grid-template-columns:minmax(260px,1fr) minmax(180px,240px) minmax(260px,360px) auto;gap:16px;align-items:end;padding:20px;border-bottom:1px solid var(--line,#dce3ef);background:#f8fafc}.import-defaults h3{margin:0 0 4px}.import-defaults p{margin:0;color:var(--muted,#64748b)}.import-defaults label{display:flex;flex-direction:column;gap:6px;font-weight:600}.import-defaults select{min-height:42px}@media(max-width:900px){.import-defaults{grid-template-columns:1fr}.import-defaults .primary{width:100%}}
+
+.import-draft-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:900px){.section-head{align-items:flex-start;gap:14px;flex-direction:column}.import-draft-actions{width:100%;justify-content:flex-start}.import-draft-actions .primary{margin-left:auto}}
+
+/* V2.03 — sélecteur visuel de couleur pour le paramétrage OCR */
+.import-color-control{display:flex;align-items:center;gap:7px;min-width:220px;flex-wrap:wrap}.import-color-picker{position:relative;width:38px;height:34px;display:inline-block;cursor:pointer;flex:0 0 auto}.import-color-picker input[type="color"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.import-color-preview{display:block;width:38px;height:34px;border-radius:8px;border:2px solid #fff;box-shadow:0 0 0 1px #cbd5e1;pointer-events:none}.import-color-picker:hover .import-color-preview{box-shadow:0 0 0 2px #93a4bd}.import-color-control .import-color-text{width:88px!important;min-width:88px!important;max-width:88px!important;padding:7px 8px!important}.import-color-control .table-action.small{white-space:nowrap}

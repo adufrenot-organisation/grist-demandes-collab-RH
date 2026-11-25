@@ -1,4 +1,4 @@
-const VERSION="V2.00";
+const VERSION="V2.03";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS",importConfig:"PARAM_IMPORT_CONGES",importRuns:"IMPORT_CONGES",importLines:"IMPORT_CONGES_LIGNES"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null,planningRequestStart:"",planningRequestEnd:"",importConfigRows:[],importDrafts:[],importOcrWords:[],importFileName:"",importDetectedCount:0};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -1138,15 +1138,30 @@ async function renderImportConfigAdmin(){
     <td><select data-ic-motif="${r.id}">${opts}</select></td>
     <td><select data-ic-type="${r.id}"><option value="CONGE">Congé</option><option value="ABSENCE">Absence</option><option value="PRESENCE">Présence</option><option value="AUCUN_IMPACT">Aucun impact</option></select></td>
     <td><input data-ic-conf="${r.id}" type="number" min="0" max="100" value="${Number(F(r,"Confiance_Min")??70)}"></td>
-    <td><input data-ic-color="${r.id}" class="import-color-text" value="${esc(validHexColor(F(r,"Couleur_Attendue"))||"")}" placeholder="#RRGGBB" maxlength="7"></td>
+    <td>${(()=>{const c=validHexColor(F(r,"Couleur_Attendue"))||"";const picker=c||"#FFFFFF";return `<div class="import-color-control"><label class="import-color-picker" title="Choisir la couleur attendue"><span class="import-color-preview" data-ic-color-preview="${r.id}" style="background:${esc(picker)}"></span><input type="color" data-ic-color-picker="${r.id}" value="${esc(picker)}" aria-label="Choisir la couleur attendue pour ${esc(F(r,"Code_Import")||"ce code")}"></label><input data-ic-color="${r.id}" class="import-color-text" value="${esc(c)}" placeholder="#RRGGBB" maxlength="7" spellcheck="false"><button type="button" class="table-action small" data-ic-color-clear="${r.id}" title="Effacer la couleur">Effacer</button></div>`})()}</td>
     <td><input data-ic-tol="${r.id}" type="number" min="0" max="442" value="${Number(F(r,"Tolerance_Couleur")??80)}"></td>
     <td><input data-ic-create="${r.id}" type="checkbox" ${F(r,"Creer_Demande")!==false?'checked':''}></td>
     <td><input data-ic-active="${r.id}" type="checkbox" ${F(r,"Actif")!==false?'checked':''}></td>
     <td><input data-ic-comment="${r.id}" value="${esc(F(r,"Commentaire")||"")}"></td>
-    <td><button class="table-action" data-ic-save="${r.id}">Enregistrer</button></td>
+    <td><div class="row-actions"><button class="table-action" data-ic-save="${r.id}">Enregistrer</button><button class="table-action danger" data-ic-delete="${r.id}" type="button">Supprimer</button></div></td>
   </tr>`).join(""):'<tr><td colspan="10">Aucun code configuré.</td></tr>';
   for(const r of mappingRows){const m=document.querySelector(`[data-ic-motif="${r.id}"]`);if(m)m.value=String(rid(F(r,"Motif"))||"");const t=document.querySelector(`[data-ic-type="${r.id}"]`);if(t)t.value=norm(F(r,"Type_Demande"))||importDefaultType();}
   document.querySelectorAll('[data-ic-save]').forEach(b=>b.onclick=()=>saveImportConfigRow(Number(b.dataset.icSave)).catch(e=>showImportConfigMsg(e?.message||String(e),"danger")));
+  document.querySelectorAll('[data-ic-delete]').forEach(b=>b.onclick=()=>deleteImportConfigRow(Number(b.dataset.icDelete)).catch(e=>showImportConfigMsg(e?.message||String(e),"danger")));
+  document.querySelectorAll('[data-ic-color-picker]').forEach(p=>p.oninput=()=>{const id=p.dataset.icColorPicker,hex=document.querySelector(`[data-ic-color="${id}"]`),preview=document.querySelector(`[data-ic-color-preview="${id}"]`);if(hex)hex.value=String(p.value||"").toUpperCase();if(preview)preview.style.background=p.value||"#FFFFFF";});
+  document.querySelectorAll('[data-ic-color]').forEach(h=>{h.oninput=()=>{const id=h.dataset.icColor,c=validHexColor(h.value),picker=document.querySelector(`[data-ic-color-picker="${id}"]`),preview=document.querySelector(`[data-ic-color-preview="${id}"]`);if(c){if(picker)picker.value=c;if(preview)preview.style.background=c;}};});
+  document.querySelectorAll('[data-ic-color-clear]').forEach(b=>b.onclick=()=>{const id=b.dataset.icColorClear,hex=document.querySelector(`[data-ic-color="${id}"]`),picker=document.querySelector(`[data-ic-color-picker="${id}"]`),preview=document.querySelector(`[data-ic-color-preview="${id}"]`);if(hex)hex.value="";if(picker)picker.value="#FFFFFF";if(preview)preview.style.background="#FFFFFF";});
+}
+
+async function deleteImportConfigRow(id){
+  const r=(S.importConfigRows||[]).find(x=>Number(x.id)===Number(id));
+  if(!r)throw new Error("Correspondance OCR introuvable.");
+  if(importIsDefaultRow(r))throw new Error("La ligne de valeurs par défaut ne peut pas être supprimée.");
+  const code=importCode(F(r,"Code_Import"))||`#${id}`;
+  if(!window.confirm(`Supprimer la correspondance OCR ${code} ?\n\nLes demandes et historiques déjà créés ne seront pas supprimés.`))return;
+  await grist.docApi.applyUserActions([["RemoveRecord",T.importConfig,id]]);
+  await renderImportConfigAdmin();
+  showImportConfigMsg(`Code ${code} supprimé.`);
 }
 async function saveImportConfigRow(id){
   const code=importCode(document.querySelector(`[data-ic-code="${id}"]`)?.value),motif=Number(document.querySelector(`[data-ic-motif="${id}"]`)?.value||0);if(!code||!motif)throw new Error("Code import et motif RH obligatoires.");
@@ -1329,6 +1344,10 @@ function renderImportDrafts(){
   document.querySelectorAll('[data-import-select]').forEach(c=>c.onchange=()=>{S.importDrafts[Number(c.dataset.importSelect)].selected=c.checked;updateImportCreateButton()});updateImportCreateButton();
 }
 function updateImportCreateButton(){const b=$("importCreateRequestsBtn");if(b)b.disabled=!(S.importDrafts||[]).some(x=>x.selected)}
+function setAllImportDraftSelection(selected){
+  (S.importDrafts||[]).forEach(d=>{if(d.createRequest)d.selected=!!selected});
+  renderImportDrafts();
+}
 async function createImportedRequests(){
   const all=(S.importDrafts||[]),selected=all.filter(x=>x.createRequest&&x.selected);if(!all.length)throw new Error("Aucune période détectée.");const resourceId=Number($("importResource").value||0),resource=(S.resources||[]).find(r=>r.id===resourceId);if(!resource)throw new Error("Ressource introuvable.");
   await ensureImportTables();const now=Math.floor(Date.now()/1000),who=email(S.user?.email)||email(F(S.person||{},"Email"))||"";const runCreated=await grist.getTable(T.importRuns).create({fields:{Ressource:resourceId,Annee:Number($("importYear").value),Fichier_Nom:S.importFileName||"",Date_Import:now,Importe_Par:who,Statut:"EN_COURS",Nb_Codes_Detectes:Number(S.importDetectedCount||0),Nb_Demandes_Creees:0,Nb_Erreurs:0,Message:"Validation de l’import"}});const runId=Number(runCreated?.id||runCreated);let createdCount=0,errors=0;
@@ -2295,6 +2314,8 @@ async function boot(){
   if($("saveImportDefaultsBtn")) $("saveImportDefaultsBtn").onclick=()=>saveImportDefaults().catch(e=>showImportConfigMsg(e?.message||String(e),"danger"));
   if($("importAnalyzeBtn")) $("importAnalyzeBtn").onclick=()=>analyzeImportImage().catch(e=>showImportMsg(e?.message||String(e),"danger"));
   if($("importCreateRequestsBtn")) $("importCreateRequestsBtn").onclick=()=>createImportedRequests().catch(e=>showImportMsg(e?.message||String(e),"danger"));
+  if($("importSelectAllBtn")) $("importSelectAllBtn").onclick=()=>setAllImportDraftSelection(true);
+  if($("importSelectNoneBtn")) $("importSelectNoneBtn").onclick=()=>setAllImportDraftSelection(false);
   if($("savePlanningKpiRolesBtn")) $("savePlanningKpiRolesBtn").onclick=()=>savePlanningKpiRoleRules().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
   if($("addPlanningKpiOverrideBtn")) $("addPlanningKpiOverrideBtn").onclick=()=>addPlanningKpiOverride().catch(e=>showSyncAdminMsg("planningParamsMsg",e?.message||String(e),"danger"));
   if($("planningWeekChoices")) $("planningWeekChoices").addEventListener("change",()=>{const vals=[...document.querySelectorAll('#planningWeekChoices input[type="checkbox"]:checked')].map(x=>Number(x.value)).sort((a,b)=>a-b);const sel=$("planningDefaultWeeks");if(sel&&vals.length){const cur=Number(sel.value);sel.innerHTML=vals.map(n=>`<option value="${n}">${n} semaine${n>1?"s":""}</option>`).join("");sel.value=String(vals.includes(cur)?cur:vals[0]);}});

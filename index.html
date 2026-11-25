@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demandes RH · V2.00</title><link rel="stylesheet" href="styles.css">
+<title>Demandes RH · V2.03</title><link rel="stylesheet" href="styles.css">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js"></script></head>
 <body>
@@ -8,7 +8,7 @@
 <aside class="sidebar">
 
   <div class="brand">
-<div class="version version-brand">V2.00</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
+<div class="version version-brand">V2.03</div><div class="mark">RH</div><div class="brand-copy"><strong>Demandes RH</strong><small>Portail collaborateur</small></div><button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Développer le menu" aria-expanded="false" title="Développer le menu">›</button></div>
   <div class="nav-title" data-accordion="space">MON ESPACE <span class="acc-chevron">⌄</span></div>
   <button class="accordion-item accordion-space nav active" data-view="home">⌂ <span>Accueil</span></button>
   <button class="accordion-item accordion-space nav" data-request-menu="true" data-view="new">＋ <span>Nouvelle demande</span></button>
@@ -78,7 +78,7 @@
   <label>Ressource<select id="importResource"></select></label><label>Année<input id="importYear" type="number" min="2000" max="2100"></label>
   <label class="wide">Image du planning<input id="importImage" type="file" accept="image/png,image/jpeg,image/webp"></label>
  </div><div class="import-config-status"><span id="importConfigStatus">Chargement du paramétrage…</span><small>OCR classique exécuté dans le navigateur. Aucune IA générative.</small></div><div class="actions"><button id="importAnalyzeBtn" class="primary" type="button">Analyser l’image</button></div></div>
- <div class="card"><div class="section-head"><div><h3>Brouillons détectés</h3><p>Décochez les périodes à ne pas transformer en demandes. Les faibles confiances sont mises en évidence.</p></div><button id="importCreateRequestsBtn" class="primary" type="button" disabled>Valider et créer les demandes</button></div><div class="tablewrap"><table><thead><tr><th>Créer</th><th>Code</th><th>Motif RH</th><th>Début</th><th>Fin</th><th>Confiance</th><th>Action</th></tr></thead><tbody id="importDraftRows"><tr><td colspan="7">Aucun brouillon.</td></tr></tbody></table></div></div>
+ <div class="card"><div class="section-head"><div><h3>Brouillons détectés</h3><p>Décochez les périodes à ne pas transformer en demandes. Les faibles confiances sont mises en évidence.</p></div><div class="import-draft-actions"><button id="importSelectAllBtn" class="secondary" type="button">Tout sélectionner</button><button id="importSelectNoneBtn" class="secondary" type="button">Tout désélectionner</button><button id="importCreateRequestsBtn" class="primary" type="button" disabled>Valider et créer les demandes</button></div></div><div class="tablewrap"><table><thead><tr><th>Créer</th><th>Code</th><th>Motif RH</th><th>Début</th><th>Fin</th><th>Confiance</th><th>Action</th></tr></thead><tbody id="importDraftRows"><tr><td colspan="7">Aucun brouillon.</td></tr></tbody></table></div></div>
 </section>
 <section id="view-planning" class="view">
  <div class="pagehead planning-pagehead"><div><span class="pill">PLANNING</span><h2>Planning présence</h2><p>Vue en lecture seule, synchronisée depuis Cockpit RH et restituée selon le paramétrage des motifs.</p></div><div class="planning-sync-badge">● <span id="planningSync">En attente de synchronisation</span></div></div>
