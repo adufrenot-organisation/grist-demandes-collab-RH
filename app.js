@@ -1659,7 +1659,7 @@ function isConnectedResource(resourceId){
   return !!personEmail&&personEmail===resourceEmail;
 }
 function canShowIndividualRealMotifToggle(resourceId){
-  return isConnectedResource(resourceId);
+  return S.isOwner || isConnectedResource(resourceId);
 }
 function canSeeTeamAvailabilityRealMotif(resourceId){
   const id=Number(resourceId||0);if(!id)return false;
@@ -1820,7 +1820,7 @@ function renderAnnualPresence(){
   const rate=$("annualPresenceRateKpi");if(rate)rate.textContent=stats.rate===null?"Taux de présence —":`Taux de présence ${stats.rate.toLocaleString("fr-FR",{maximumFractionDigits:1})} %`;
   const abs=$("annualAbsenceKpi");if(abs)abs.textContent=`${stats.absence} jour${stats.absence>1?"s":""} d’absence`;
   const {confirmed,forecast}=annualCalendarData(resourceId,year);
-  // Les droits de couleur/détail existants restent inchangés. La case, elle, reste réservée au calendrier propre de la ressource.
+  // Les droits de couleur/détail existants restent inchangés. La case est accessible au OWNER sur toute ressource et à chacun sur son propre calendrier.
   const canSeeDetails=canSeePlanningMotifDetails(resourceId);
   const monthNames=Array.from({length:12},(_,m)=>new Date(year,m,1).toLocaleDateString("fr-FR",{month:"long"}));
   const weekdays=["L","M","M","J","V","S","D"];
