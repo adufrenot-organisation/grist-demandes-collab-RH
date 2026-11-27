@@ -1,4 +1,4 @@
-const VERSION="V2.06";
+const VERSION="V2.08";
 const T={requests:"Demandes_RH",resources:"Ressources",motifs:"Motifs_RH",admins:"ADMIN_PORTAIL",labels:"PARAM_LIBELLES",managerResources:"Managers_Ressources",identity:"SESSION_IDENTITE",presenceMap:"PARAM_MOTIFS_PRESENCE",planning:"PLANNING_PRESENCE",menuOrder:"PARAM_MENU_ORDRE",syncParams:"PARAM_SYNCHRO",syncRequests:"DEMANDES_SYNCHRO",planningParams:"PARAM_PLANNING",planningKpis:"PARAM_PLANNING_INDICATEURS",importConfig:"PARAM_IMPORT_CONGES",importRuns:"IMPORT_CONGES",importLines:"IMPORT_CONGES_LIGNES"};
 const S={user:null,person:null,requests:[],myRequests:[],allRequests:[],motifs:[],resources:[],editing:null,motifEditing:null,isOwner:false,isAdmin:false,accessLevel:"",labels:[],labelsReady:false,managerLinks:[],managedResources:[],viewAs:null,debugEnabled:false,debugLog:[],presenceMappings:[],presenceMapReady:false,planningRows:[],planningReady:false,planningStart:null,menuOrder:[],menuOrderReady:false,syncParams:[],syncParamsReady:false,syncRequests:[],syncRequestsReady:false,planningParams:[],planningParamsReady:false,planningWeeks:null,planningSelectedResourceIds:[],planningKpiRules:[],planningKpiReady:false,planningAnnualTeam:"",planningAnnualYear:null,planningAnnualShowRealMotifs:false,annualPresenceShowRealMotifs:false,planningRequestStart:"",planningRequestEnd:"",importConfigRows:[],importDrafts:[],importOcrWords:[],importFileName:"",importDetectedCount:0};
 const SYNC={host:"",cockpitDocId:"",apiKey:""};
@@ -130,7 +130,7 @@ async function syncRequestToCockpit(localId){
   const code=norm(F(localReq,"Motif_Code")); const motif=motifs.find(x=>norm(x.fields?.Code)===code);
   if(!motif)throw new Error(`Motif '${code}' absent du Cockpit.`);
   const uuid=norm(F(localReq,"UUID_Demande")), found=reqs.find(x=>norm(x.fields?.UUID_Demande)===uuid);
-  const fields={Reference:F(localReq,"Reference"),Demandeur:person.id,Type:F(localReq,"Type"),Date_Debut:F(localReq,"Date_Debut"),Date_Fin:F(localReq,"Date_Fin"),Motif:motif.id,Commentaire_Demandeur:F(localReq,"Commentaire_Demandeur"),Date_Demande:F(localReq,"Date_Demande"),UUID_Demande:uuid,Statut:F(localReq,"Statut")||"EN_ATTENTE"};
+  const fields={Reference:F(localReq,"Reference"),Demandeur:person.id,Type:F(localReq,"Type"),Date_Debut:F(localReq,"Date_Debut"),Date_Fin:F(localReq,"Date_Fin"),Motif:motif.id,Commentaire_Demandeur:F(localReq,"Commentaire_Demandeur"),Date_Demande:F(localReq,"Date_Demande"),UUID_Demande:uuid,Statut:F(localReq,"Statut")||"EN_ATTENTE",AutoValidation:F(localReq,"AutoValidation")===true};
   const path=`/docs/${encodeURIComponent(c.cockpitDocId)}/tables/Demandes_RH/records`;
   if(found) await remote(path,{method:"PATCH",body:{records:[{id:found.id,fields}]}});
   else await remote(path,{method:"POST",body:{records:[{fields}]}});
@@ -974,8 +974,18 @@ function setViewAs(id){
 function managerGuideAllowed(){
   return isPmo()||currentProfile()==="MANAGER"||(S.managedResources||[]).length>0;
 }
+function resourceInternalExternalProfile(resource){
+  return norm(F(resource||{},"Profil_interne_externe","Type")).toUpperCase();
+}
 function internalExternalProfile(){
-  return norm(F(S.person||{},"Profil_interne_externe")).toUpperCase();
+  return resourceInternalExternalProfile(S.person);
+}
+function autoValidationForResource(resource){
+  return resourceInternalExternalProfile(resource)==="INTERNE";
+}
+function autoValidationForResourceId(resourceId){
+  const resource=(S.resources||[]).find(r=>Number(r.id)===Number(resourceId));
+  return autoValidationForResource(resource);
 }
 function hideRequestsForInternalsEnabled(){
   const raw=planningParamValue("MASQUER_DEMANDES_INTERNES","true").toLowerCase();
@@ -1351,7 +1361,7 @@ function setAllImportDraftSelection(selected){
 async function createImportedRequests(){
   const all=(S.importDrafts||[]),selected=all.filter(x=>x.createRequest&&x.selected);if(!all.length)throw new Error("Aucune période détectée.");const resourceId=Number($("importResource").value||0),resource=(S.resources||[]).find(r=>r.id===resourceId);if(!resource)throw new Error("Ressource introuvable.");
   await ensureImportTables();const now=Math.floor(Date.now()/1000),who=email(S.user?.email)||email(F(S.person||{},"Email"))||"";const runCreated=await grist.getTable(T.importRuns).create({fields:{Ressource:resourceId,Annee:Number($("importYear").value),Fichier_Nom:S.importFileName||"",Date_Import:now,Importe_Par:who,Statut:"EN_COURS",Nb_Codes_Detectes:Number(S.importDetectedCount||0),Nb_Demandes_Creees:0,Nb_Erreurs:0,Message:"Validation de l’import"}});const runId=Number(runCreated?.id||runCreated);let createdCount=0,errors=0;
-  for(const d of all){if(!d.createRequest){await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"RECONNU_SANS_DEMANDE",Message:"Code reconnu · aucune demande configurée"}});continue;}if(!d.selected){await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"NON_SELECTIONNE",Message:"Période non sélectionnée pour création"}});continue;}try{const u=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`,fields={Reference:`IMP-${new Date().getFullYear()}-${u.slice(0,8).toUpperCase()}`,Demandeur:resourceId,Type:d.type||"CONGE",Type_Action:"DEMANDE",Date_Debut:ep(d.start),Date_Fin:ep(d.end),Motif:d.motifId,Motif_Code:motifCode(d.motifId),Commentaire_Demandeur:`Import OCR ${S.importFileName||''} · code ${d.code}`,Statut:"EN_ATTENTE",Date_Demande:now,Date_Modification:now,UUID_Demande:u,Version_Sync:1};const cr=await grist.getTable(T.requests).create({fields}),requestId=Number(cr?.id||cr);await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"CREEE",Demande_Creee:requestId,Message:"Demande EN_ATTENTE créée"}});createdCount++;}catch(e){errors++;await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"ERREUR",Message:e?.message||String(e)}})}}
+  for(const d of all){if(!d.createRequest){await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"RECONNU_SANS_DEMANDE",Message:"Code reconnu · aucune demande configurée"}});continue;}if(!d.selected){await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"NON_SELECTIONNE",Message:"Période non sélectionnée pour création"}});continue;}try{const u=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`,fields={Reference:`IMP-${new Date().getFullYear()}-${u.slice(0,8).toUpperCase()}`,Demandeur:resourceId,Type:d.type||"CONGE",Type_Action:"DEMANDE",Date_Debut:ep(d.start),Date_Fin:ep(d.end),Motif:d.motifId,Motif_Code:motifCode(d.motifId),Commentaire_Demandeur:`Import OCR ${S.importFileName||''} · code ${d.code}`,Statut:"EN_ATTENTE",Date_Demande:now,Date_Modification:now,UUID_Demande:u,Version_Sync:1,AutoValidation:autoValidationForResource(resource)};const cr=await grist.getTable(T.requests).create({fields}),requestId=Number(cr?.id||cr);await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"CREEE",Demande_Creee:requestId,Message:"Demande EN_ATTENTE créée"}});createdCount++;}catch(e){errors++;await grist.getTable(T.importLines).create({fields:{Import:runId,Code_Import:d.code,Motif:d.motifId,Date_Debut:ep(d.start),Date_Fin:ep(d.end),Confiance:d.confidence,Statut:"ERREUR",Message:e?.message||String(e)}})}}
   await grist.getTable(T.importRuns).update({id:runId,fields:{Statut:errors?"TERMINE_AVEC_ERREURS":"TERMINE",Nb_Demandes_Creees:createdCount,Nb_Erreurs:errors,Message:`${createdCount} demande(s) créée(s), ${errors} erreur(s).`}});S.importDrafts=[];renderImportDrafts();showImportMsg(`${createdCount} demande(s) créée(s) dans Demandes_RH. Elles seront prises en charge par la synchronisation.`,errors?"warn":"success");await load();
 }
 function renderAdmin(){
@@ -2221,7 +2231,8 @@ async function save(){
   const a=$("start").value,b=$("end").value,m=+$("motif").value;
   if(!a||!b||!m)return msg("Motif et période obligatoires.");
   if(b<a)return msg("La date de fin doit être ≥ à la date de début.");
-  const fields={Type:$("type").value,Date_Debut:ep(a),Date_Fin:ep(b),Motif:m,Motif_Code:motifCode(m),Commentaire_Demandeur:$("comment").value.trim(),Date_Modification:Math.floor(Date.now()/1000)};
+  const currentResourceId=S.editing?rid(F(S.myRequests.find(x=>x.id===S.editing)||{},"Demandeur")):Number(S.person?.id||0);
+  const fields={Type:$("type").value,Date_Debut:ep(a),Date_Fin:ep(b),Motif:m,Motif_Code:motifCode(m),Commentaire_Demandeur:$("comment").value.trim(),Date_Modification:Math.floor(Date.now()/1000),AutoValidation:autoValidationForResourceId(currentResourceId)};
   const tab=grist.getTable(T.requests);
   if(S.editing){
     const r=S.myRequests.find(x=>x.id===S.editing);if(!r||st(r)!=="EN_ATTENTE")throw new Error("Demande non modifiable.");
@@ -2308,7 +2319,7 @@ async function submitCancellationRequest(){
     Motif:rid(F(original,"Motif")),Motif_Code:F(original,"Motif_Code")||motifCode(rid(F(original,"Motif"))),
     Commentaire_Demandeur:`Demande d’annulation de ${originalRef}${comment?` — ${comment}`:""}`,
     Statut:"EN_ATTENTE",Date_Demande:Math.floor(Date.now()/1000),Date_Modification:Math.floor(Date.now()/1000),
-    UUID_Demande:u,Version_Sync:1
+    UUID_Demande:u,Version_Sync:1,AutoValidation:autoValidationForResourceId(rid(F(original,"Demandeur"))||S.person?.id)
   };
   const created=await grist.getTable(T.requests).create({fields});
   const newId=Number(created?.id||created)||0;
